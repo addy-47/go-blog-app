@@ -1,0 +1,65 @@
+replicaCount: 1
+
+frontend:
+  image: frontend:latest
+  port: 8080
+  apiUrl: http://backend-service:8080
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "200Mi"
+
+backend:
+  image: backend:latest
+  port: 8080
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "200Mi"
+
+worker:
+  image: worker:latest
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "200Mi"
+
+loggingAgent:
+  image: logging-agent:latest
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "50Mi"
+    limits:
+      cpu: "100m"
+      memory: "100Mi"
+
+database:
+  image: postgres:13
+  port: 5432
+  dbName: blogdb
+  dbUser: bloguser
+  dbPassword: password
+  storage: 4Gi
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "100Mi"
+    limits:
+      cpu: "100m"
+      memory: "200Mi"
+
+config:
+  dbHost: db-service
+  dbPort: "5432"
+  dbName: blogdb
+  dbUser: bloguser

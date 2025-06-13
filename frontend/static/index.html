@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blog</title>
+</head>
+<body>
+    <h1>Blog Posts</h1>
+    <div id="posts"></div>
+    <script>
+        // Fetch the API URL from the /config endpoint
+        fetch('/config')
+            .then(response => response.json())
+            .then(config => {
+                // Fetch posts from the backend API
+                fetch(config.apiUrl + '/posts')
+                    .then(response => response.json())
+                    .then(posts => {
+                        const postsDiv = document.getElementById('posts');
+                        posts.forEach(post => {
+                            const postElem = document.createElement('div');
+                            postElem.innerHTML = `<h2>${post.title}</h2><p>${post.content}</p>`;
+                            postsDiv.appendChild(postElem);
+                        });
+                    });
+            });
+    </script>
+</body>
+</html>

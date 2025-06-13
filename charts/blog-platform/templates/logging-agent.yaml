@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: logging-agent
+spec:
+  selector:
+    matchLabels:
+      app: logging-agent
+  template:
+    metadata:
+      labels:
+        app: logging-agent
+    spec:
+      containers:
+      - name: logging-agent
+        image: {{ .Values.loggingAgent.image }}
+        imagePullPolicy: Never
+        resources:
+          requests:
+            cpu: {{ .Values.loggingAgent.resources.requests.cpu }}
+            memory: {{ .Values.loggingAgent.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.loggingAgent.resources.limits.cpu }}
+            memory: {{ .Values.loggingAgent.resources.limits.memory }}
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
