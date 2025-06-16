@@ -3,7 +3,7 @@ replicaCount: 1
 frontend:
   image: frontend:latest
   port: 8080
-  apiUrl: http://backend-service:8080
+  apiUrl: /api
   resources:
     requests:
       cpu: "50m"

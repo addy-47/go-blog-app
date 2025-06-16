@@ -12,7 +12,7 @@
 - 🗄️ **Database**: A PostgreSQL database managed as a StatefulSet with persistent storage
 - 📦 **Helm**: Packages all Kubernetes resources for easy deployment and management
 - 🔰 **CRD**: A `BlogPost` custom resource for Kubernetes API extensions
-- 🔒 **Istio**: Provides service mesh features like mTLS and traffic routing
+- 🔒 **Istio**: Provides service mesh with mTLS, secure routing via Gateway, and traffic management
 
 ### 🏗️ Kubernetes Architecture
 - 🔄 **Deployments**: Manage stateless frontend, backend, and worker services
@@ -73,7 +73,7 @@ blog-platform/
 │           ├── logging-agent.yaml
 ├── crds/                      # Custom Resource Definition
 │   └── blogpost-crd.yaml
-├── kubernetes/                # Istio configurations
+├── k8s-security/              # Istio configurations
 │   └── istio.yaml
 ├── scripts/                   # Automation scripts
 │   ├── build.sh
@@ -145,16 +145,28 @@ kubectl get pods
 
 ### 7️⃣ Access the Application
 ```bash
-# Get the frontend URL
-minikube service frontend-service --url
+# Get the Istio Gateway URL
+minikube service istio-ingressgateway -n istio-system --url
 
-# Open the URL in a browser to view the blog interface
+# The application will be accessible on the HTTP port (usually port 31116)
+# Frontend: http://<minikube-ip>:31116/
+# Backend API: http://<minikube-ip>:31116/api/
+
+# Example: http://192.168.49.2:31116/
 ```
 
 ### 8️⃣ Test PostgreSQL and Worker
 ```bash
-# Create a post via the backend API
-curl -X POST -H "Content-Type: application/json" -d '{"title":"Test Post","content":"Hello World"}' http://<backend-service-ip>:8080/posts
+# Get the Istio Gateway URL
+GATEWAY_URL=$(minikube service istio-ingressgateway -n istio-system --url | grep :31116)
+
+# Create a post via the backend API through Istio Gateway
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"title":"Test Post","content":"Hello World"}' \
+  $GATEWAY_URL/api/posts
+
+# Get all posts
+curl -s $GATEWAY_URL/api/posts
 
 # Verify the worker detects the post
 kubectl logs -l app=worker
@@ -162,10 +174,15 @@ kubectl logs -l app=worker
 
 ### 9️⃣ Test CRD
 ```bash
-# Create a BlogPost CRD resource
-curl -X POST -H "Content-Type: application/json" -d '{"title":"CRD Test","content":"Hello CRD"}' http://<backend-service-ip>:8080/crd-posts
+# Create a BlogPost CRD resource through Istio Gateway
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"title":"CRD Test","content":"Hello CRD"}' \
+  $GATEWAY_URL/api/crd-posts
 
-# List BlogPost resources
+# Get CRD posts via API
+curl -s $GATEWAY_URL/api/crd-posts
+
+# List BlogPost resources directly
 kubectl get blogposts
 ```
 
@@ -191,11 +208,36 @@ minikube stop
 
 | Issue | Solution |
 |-------|----------|
-| 🔴 **Pods Not Starting** | `kubectl logs <pod-name>` or `kubectl describe pod <pod-name>` |
-| 🟡 **Istio Issues** | Check sidecar injection with `kubectl describe pod <pod-name>` |
-| 🟠 **Helm Errors** | Run `helm lint ./charts/blog-platform` or check status |
-| 🟢 **CRD Issues** | Verify with `kubectl get crd blogposts.demo.example.com` |
-| 🔵 **Resource Constraints** | Increase resources: `minikube start --memory=6144 --cpus=4` |
+| 🔴 **Backend CrashLoopBackOff** | Check database connectivity: `kubectl logs <backend-pod> -c backend` |
+| 🟡 **Istio mTLS Issues** | Verify DestinationRules: `kubectl get destinationrules` |
+| 🟠 **Database Connection Reset** | Check if database has Istio sidecar disabled |
+| 🟢 **API Not Accessible** | Verify Istio Gateway: `kubectl get gateway,virtualservice` |
+| 🔵 **Frontend Can't Reach Backend** | Check if API URL uses relative path `/api` |
+| 🟣 **Istio Gateway Not Working** | Check ingress gateway: `kubectl get svc istio-ingressgateway -n istio-system` |
+| 🔶 **Resource Constraints** | Increase resources: `minikube start --memory=6144 --cpus=4` |
+
+## 🛡️ Security Architecture
+
+### Istio Service Mesh Security
+- ✅ **mTLS Enabled**: Automatic mutual TLS between services with Istio sidecars
+- ✅ **Gateway Routing**: All external traffic goes through Istio Gateway
+- ✅ **Backend Protection**: Backend service remains internal (ClusterIP only)
+- ✅ **Database Exception**: Database excluded from mTLS (no Istio sidecar)
+- ✅ **Traffic Policies**: Secure routing with VirtualServices and DestinationRules
+
+### Access Control
+```bash
+# Frontend (via Istio Gateway)
+https://<gateway-url>/                    # Static frontend
+
+# Backend API (via Istio Gateway)
+https://<gateway-url>/api/posts          # Blog posts API
+https://<gateway-url>/api/crd-posts      # CRD API
+
+# Internal Services (ClusterIP only)
+backend-service:8080                     # Not externally accessible
+db-service:5432                          # Not externally accessible
+```
 
 ## ⚡ Kubernetes Components
 

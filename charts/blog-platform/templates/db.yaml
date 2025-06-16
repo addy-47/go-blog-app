@@ -12,10 +12,14 @@ spec:
     metadata:
       labels:
         app: db
+      annotations:
+        sidecar.istio.io/inject: "false"
     spec:
       containers:
       - name: postgres
         image: {{ .Values.database.image }}
+        ports:
+        - containerPort: {{ .Values.database.port }}
         env:
         - name: POSTGRES_DB
           value: {{ .Values.database.dbName }}
