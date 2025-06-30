@@ -46,21 +46,20 @@ module "service_accounts" {
 
 # 3. Create GKE Cluster
 module "gke_cluster" {
-  source         = "./modules/gke-cluster"
-  gcp_project_id = var.gcp_project_id
-  gcp_region     = var.gcp_region
+  source           = "./modules/gke-cluster"
+  gcp_project_id   = var.gcp_project_id
+  gcp_region       = var.gcp_region
   gke_cluster_name = var.gke_cluster_name
-  depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
+  depends_on       = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
 # 4. Create Artifact Registry repository
 module "artifact_registry" {
-  source                   = "./modules/artifact-registry"
-  gcp_project_id           = var.gcp_project_id
-  gcp_region               = var.gcp_region
-  gar_repository           = var.gar_repository
-  github_actions_sa_email  = module.service_accounts.github_actions_sa_email
-  depends_on               = [module.gcp_project_setup] # Ensure APIs are enabled first
+  source                  = "./modules/artifact-registry"
+  gcp_project_id          = var.gcp_project_id
+  gcp_region              = var.gcp_region
+  gar_repository          = var.gar_repository
+  depends_on              = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
 # 5. Setup Workload Identity for GitHub Actions
@@ -74,8 +73,8 @@ module "workload_identity" {
 
 # 6. Provision Kubernetes Namespaces for your services
 module "ci-cd_namespace" {
-  source = "./modules/gke-namespace"
-  name   = "ci-cd"
+  source     = "./modules/gke-namespace"
+  name       = "ci-cd"
   depends_on = [module.gke_cluster] # Ensure cluster is ready
 }
 
@@ -84,15 +83,15 @@ module "cloud_sql_instance" {
   source         = "./modules/cloud-sql"
   gcp_project_id = var.gcp_project_id
   gcp_region     = var.gcp_region
-  database_name  = "blog-db" # Example database name
+  database_name  = "blog-db"                  # Example database name
   depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
 # 8. Example: Provision a Secret Manager secret for your application
 module "app_secret" {
-  source              = "./modules/secret-manager"
-  gcp_project_id      = var.gcp_project_id
-  secret_name         = "my-app-secret" # Example secret name
+  source                = "./modules/secret-manager"
+  gcp_project_id        = var.gcp_project_id
+  secret_name           = "my-app-secret" # Example secret name
   app_workload_sa_email = module.service_accounts.app_workload_sa_email
-  depends_on          = [module.gcp_project_setup] # Ensure APIs are enabled first
+  depends_on            = [module.gcp_project_setup] # Ensure APIs are enabled first
 }

@@ -6,7 +6,7 @@ output "gke_cluster_name" {
 output "gke_cluster_endpoint" {
   description = "The endpoint of the GKE cluster."
   value       = module.gke_cluster.cluster_endpoint
-  sensitive = true
+  sensitive   = true
 }
 
 output "artifact_registry_repository_url" {
