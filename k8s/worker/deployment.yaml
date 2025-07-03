@@ -1,33 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: worker
+  namespace: ci-cd
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: worker
   template:
     metadata:
       labels:
-        app: backend
-      annotations:
-        traffic.sidecar.istio.io/excludeOutboundIPRanges: "10.96.0.1/32"
+        app: worker
     spec:
-      serviceAccountName: backend-sa  
+      serviceAccountName: app-workload-sa
       containers:
-      - name: backend
-        image: {{ .Values.backend.image }}
-        imagePullPolicy: Never
-        ports:
-        - containerPort: {{ .Values.backend.port }}
-        resources:
-          requests:
-            cpu: {{ .Values.backend.resources.requests.cpu }}
-            memory: {{ .Values.backend.resources.requests.memory }}
-          limits:
-            cpu: {{ .Values.backend.resources.limits.cpu }}
-            memory: {{ .Values.backend.resources.limits.memory }}
+      - name: worker
+        image: image-placeholder:latest # This will be replaced by the CI/CD pipeline
         env:
         - name: DB_HOST
           valueFrom:
@@ -54,14 +43,10 @@ spec:
             secretKeyRef:
               name: db-secret
               key: DB_PASSWORD
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend-service
-spec:
-  ports:
-  - port: 8080
-    targetPort: {{ .Values.backend.port }}
-  selector:
-    app: backend
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"    

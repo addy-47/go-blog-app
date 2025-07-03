@@ -1,22 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: worker
+  name: backend
+  namespace: ci-cd
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
   selector:
     matchLabels:
-      app: worker
+      app: backend
   template:
     metadata:
       labels:
-        app: worker
+        app: backend
     spec:
-      serviceAccountName: backend-sa
+      serviceAccountName: app-workload-sa
       containers:
-      - name: worker
-        image: {{ .Values.worker.image }}
-        imagePullPolicy: Never
+      - name: backend
+        image: image-placeholder:latest # This will be replaced by the CI/CD pipeline
+        ports:
+        - containerPort: 8080
         env:
         - name: DB_HOST
           valueFrom:
@@ -44,4 +46,9 @@ spec:
               name: db-secret
               key: DB_PASSWORD
         resources:
-          {{- toYaml .Values.worker.resources | nindent 10 }}
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
