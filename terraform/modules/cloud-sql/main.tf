@@ -3,6 +3,7 @@ resource "google_sql_database_instance" "main" {
   name             = "${var.database_name}-instance"
   project          = var.gcp_project_id
   region           = var.gcp_region
+  deletion_protection = false
   settings {
     tier = "db-f1-micro" # Smallest tier for testing
     ip_configuration {

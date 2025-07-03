@@ -55,11 +55,11 @@ module "gke_cluster" {
 
 # 4. Create Artifact Registry repository
 module "artifact_registry" {
-  source                  = "./modules/artifact-registry"
-  gcp_project_id          = var.gcp_project_id
-  gcp_region              = var.gcp_region
-  gar_repository          = var.gar_repository
-  depends_on              = [module.gcp_project_setup] # Ensure APIs are enabled first
+  source         = "./modules/artifact-registry"
+  gcp_project_id = var.gcp_project_id
+  gcp_region     = var.gcp_region
+  gar_repository = var.gar_repository
+  depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
 # 5. Setup Workload Identity for GitHub Actions

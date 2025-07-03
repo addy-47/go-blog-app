@@ -2,6 +2,10 @@ resource "kubernetes_namespace" "main" {
   metadata {
     name = var.name
   }
+
+  timeouts {
+    delete = "10m"
+  }
 }
 
 variable "name" {
