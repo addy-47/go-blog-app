@@ -1,3 +1,9 @@
+#ci-cd pipeline for building and deploying services to GKE using GitHub Actions
+# This workflow builds Docker images for each service, pushes them to Google Artifact Registry,
+# and deploys them to a GKE cluster. It also handles changes in the codebase
+# by checking which services have changed and only processing those.
+# The workflow is triggered on pushes to the ci-cd branch.
+
 name: Build and Deploy Services
 
 on:
