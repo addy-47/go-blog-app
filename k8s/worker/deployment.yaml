@@ -17,6 +17,16 @@ spec:
       containers:
       - name: worker
         image: image-placeholder:latest # This will be replaced by the CI/CD pipeline
+        livenessProbe:
+          exec:
+            # This command runs the compiled binary inside the container with the "healthcheck" argument.
+            # If it exits with a non-zero code, Kubernetes will restart the container.
+            command:
+            - /worker # Assumes the binary is named 'worker' in the container's root
+            - healthcheck
+          initialDelaySeconds: 30 # Give the worker time to start and connect to the DB
+          periodSeconds: 30
+          timeoutSeconds: 5
         env:
         - name: DB_HOST
           valueFrom:

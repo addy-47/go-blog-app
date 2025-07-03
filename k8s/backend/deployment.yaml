@@ -19,6 +19,18 @@ spec:
         image: image-placeholder:latest # This will be replaced by the CI/CD pipeline
         ports:
         - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10 # Wait 10s before first probe to allow for DB connection
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 20
         env:
         - name: DB_HOST
           valueFrom:
@@ -45,4 +57,3 @@ spec:
             secretKeyRef:
               name: db-secret
               key: DB_PASSWORD
-

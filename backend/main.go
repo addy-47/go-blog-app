@@ -64,6 +64,7 @@ func main() {
 	// HTTP routes
 	http.HandleFunc("/posts", postsHandler)        // PostgreSQL posts
 	http.HandleFunc("/crd-posts", crdPostsHandler) // CRD posts
+	http.HandleFunc("/healthz", healthCheckHandler(db))
 
 	log.Println("Starting backend API on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -153,6 +154,21 @@ func crdPostsHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	} else {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// healthCheckHandler checks the database connection.
+func healthCheckHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Ping is a lightweight way to check the DB connection.
+		err := db.Ping()
+		if err != nil {
+			// If ping fails, return a 500 error, which Kubernetes will see as a failed probe.
+			http.Error(w, "Database connection is not healthy", http.StatusInternalServerError)
+			return
+		}
+		// If everything is fine, return a 200 OK.
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

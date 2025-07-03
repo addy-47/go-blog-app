@@ -18,6 +18,18 @@ spec:
         image: image-placeholder:latest # This will be replaced by the CI/CD pipeline
         ports:
         - containerPort: 80
+        readinessProbe:
+          httpGet:
+            path: / # The root path should return a 200 OK status
+            port: 80
+          initialDelaySeconds: 5 # Wait 5s before first probe
+          periodSeconds: 10    # Probe every 10s
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15 # Wait 15s before first probe
+          periodSeconds: 20     # Probe every 20s
         env:
         - name: API_URL
           value: "http://backend-service.ci-cd.svc.cluster.local:8080"

@@ -25,6 +25,18 @@ func main() {
 	}
 	defer db.Close()
 
+	// Handle the "healthcheck" argument for Kubernetes liveness probes.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		err := db.Ping()
+		if err != nil {
+			log.Fatalf("Health check failed: database ping error: %v", err) // Exits with status 1
+		}
+		log.Println("Health check successful.")
+		os.Exit(0) // Exits with status 0, indicating success
+	}
+
+	log.Println("Starting worker...")
+
 	// Periodically check for new posts
 	for {
 		rows, err := db.Query("SELECT id, title FROM posts WHERE created_at > NOW() - INTERVAL '1 minute'")

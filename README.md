@@ -1,262 +1,137 @@
-# 🚀 Blog Platform
+# Go Microservices Blog Application on GKE
 
-> 💡 A Go-based blogging platform demonstrating Kubernetes components with Helm, CRDs, and Istio on Minikube.
+This project is a complete CI/CD pipeline for a microservices-based blog application written in Go. It is designed to be built and deployed automatically to a Google Kubernetes Engine (GKE) cluster using GitHub Actions.
 
-## 📋 Overview
+## Table of Contents
 
-### 🔧 Core Components
-- 🌐 **Frontend**: A Go web server serving a static HTML page to display blog posts
-- ⚙️ **Backend**: A Go REST API for managing blog posts, using PostgreSQL for primary storage and a `BlogPost` CRD
-- ⏱️ **Worker**: A Go service that periodically checks for new posts in PostgreSQL and logs them
-- 📊 **Logging Agent**: A Go DaemonSet that logs the node name from each Minikube node
-- 🗄️ **Database**: A PostgreSQL database managed as a StatefulSet with persistent storage
-- 📦 **Helm**: Packages all Kubernetes resources for easy deployment and management
-- 🔰 **CRD**: A `BlogPost` custom resource for Kubernetes API extensions
-- 🔒 **Istio**: Provides service mesh with mTLS, secure routing via Gateway, and traffic management
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Directory Structure](#directory-structure)
 
-### 🏗️ Kubernetes Architecture
-- 🔄 **Deployments**: Manage stateless frontend, backend, and worker services
-- 🌍 **Services**: Expose frontend (NodePort), backend, and database
-- 💾 **StatefulSet**: Ensures stable storage and network identity for PostgreSQL
-- 🔍 **DaemonSet**: Runs the logging agent on each node
-- 💿 **Volumes**: Persistent Volume Claim for PostgreSQL data
-- ⚙️ **ConfigMaps/Secrets**: Secure configuration management
-- 🔑 **RBAC**: Restricts Secret access to backend and worker
-- 🎯 **Helm**: Simplifies deployment with templated manifests
-- 📋 **CRD**: Custom resource management via Kubernetes API
-- 🛡️ **Istio**: Service mesh for mTLS and traffic management
+## Architecture
 
-## 🛠️ Prerequisites
+The application consists of several containerized microservices that are deployed to a GKE cluster.
 
-Ensure these tools are installed:
-- 🏃 **Minikube**: Local Kubernetes cluster (v1.32.0+)
-- 🐳 **Docker**: Container runtime (v26.1.4+)
-- 🔷 **Go**: For building services (v1.22+)
-- ⚓ **Helm**: Package manager (v3.15.0+)
-- 🌐 **Istio**: Service mesh (v1.22.0+)
-- 🎮 **kubectl**: Kubernetes CLI (v1.28.0+)
+### Services
 
-## 📂 Project Structure
+- **`frontend`**: The user-facing web interface. It communicates with the `backend` service.
+- **`backend`**: The main API service that handles business logic and communicates with the database.
+- **`worker`**: A background service for handling asynchronous tasks.
+- **`logging-agent`**: A `DaemonSet` that runs on every node in the cluster to collect and forward logs.
 
-```plaintext
-blog-platform/
-├── backend/                   # Backend API (PostgreSQL + CRD)
-│   ├── main.go
-│   ├── Dockerfile
-│   └── go.mod
-├── frontend/                  # Frontend web server
-│   ├── main.go
-│   ├── static/
-│   │   └── index.html
-│   ├── Dockerfile
-│   └── go.mod
-├── worker/                    # Background worker for post processing
-│   ├── main.go
-│   ├── Dockerfile
-│   └── go.mod
-├── logging-agent/             # Node-level logging DaemonSet
-│   ├── main.go
-│   ├── Dockerfile
-│   └── go.mod
-├── charts/                    # Helm chart for application
-│   └── blog-platform/
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── templates/
-│           ├── db-config.yaml
-│           ├── db-secret.yaml
-│           ├── rbac.yaml
-│           ├── db.yaml
-│           ├── backend.yaml
-│           ├── worker.yaml
-│           ├── frontend.yaml
-│           ├── logging-agent.yaml
-├── crds/                      # Custom Resource Definition
-│   └── blogpost-crd.yaml
-├── k8s-security/              # Istio configurations
-│   └── istio.yaml
-├── scripts/                   # Automation scripts
-│   ├── build.sh
-│   ├── cleanup.sh
-│   ├── helm-install.sh
-└── README.md
+### Technology Stack
+
+- **Application**: Go
+- **Containerization**: Docker
+- **Orchestration**: Google Kubernetes Engine (GKE)
+- **CI/CD**: GitHub Actions
+- **Artifacts**: Google Artifact Registry (GAR)
+- **Database**: Cloud SQL for PostgreSQL (or similar)
+- **Authentication**: GKE Workload Identity for secure access to Google Cloud services.
+
+## Prerequisites
+
+Before you begin, ensure you have the following set up:
+
+1.  **Google Cloud Project**: A GCP project with billing enabled.
+2.  **Required APIs**: The following APIs must be enabled in your GCP project:
+    -   Kubernetes Engine API
+    -   Artifact Registry API
+    -   Cloud SQL Admin API
+    -   Identity and Access Management (IAM) API
+3.  **Infrastructure**: The core infrastructure should be provisioned, likely using a tool like Terraform. This includes:
+    -   A GKE cluster with Workload Identity enabled.
+    -   A Google Artifact Registry (GAR) repository.
+    -   A Cloud SQL instance.
+    -   The necessary IAM Service Accounts (`app-workload-sa`, `database-sa`).
+4.  **Local Tools**:
+    -   `gcloud` CLI
+    -   `kubectl`
+    -   `docker`
+
+## Configuration
+
+To get the pipeline running, you need to configure your GitHub repository and Kubernetes manifests.
+
+### 1. GitHub Repository Secrets
+
+Navigate to your repository's **Settings > Secrets and variables > Actions** and add the following secrets:
+
+-   `GCP_PROJECT_ID`: Your Google Cloud Project ID.
+-   `GCP_WORKLOAD_IDENTITY_PROVIDER`: The full identifier of your Workload Identity Provider.
+-   `GCP_SA_EMAIL`: The email address of the Google Service Account that GitHub Actions will use to authenticate.
+
+### 2. Kubernetes Manifests
+
+You will need to update some of the Kubernetes configuration files in the `k8s/` directory with values specific to your environment.
+
+#### Database Configuration (`k8s/db-config.yaml`)
+
+Update the `data` section with your Cloud SQL instance details:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+  namespace: ci-cd
+data:
+  DB_HOST: "YOUR_CLOUDSQL_PRIVATE_IP"
+  DB_PORT: "5432"
+  DB_NAME: "YOUR_DB_NAME"
+  DB_USER: "YOUR_DB_USER"
 ```
 
-## 🚀 Setup Instructions
+#### Database Secret (`k8s/db-secret.yaml`)
 
-Follow these steps to deploy the application on Minikube:
+The database password must be created as a secret in the cluster. For security, it's recommended to create this manually or have the pipeline manage it using a GitHub secret, rather than committing the password to the repository.
 
-### 1️⃣ Start Minikube
+To create it manually, run:
+
 ```bash
-# Launch Minikube with sufficient resources
-minikube start --memory=4096
-
-# Configure Docker for Minikube
-eval $(minikube docker-env)
+kubectl create secret generic db-secret \
+  --namespace=ci-cd \
+  --from-literal=DB_PASSWORD='YOUR_SUPER_SECRET_PASSWORD'
 ```
 
-### 2️⃣ Install Dependencies
-```bash
-# Install Helm
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+## Deployment
 
-# Install Go dependencies for backend and worker
-cd backend
-go mod tidy
-cd ../worker
-go mod tidy
+The deployment process is fully automated via the GitHub Actions workflow defined in `.github/workflows/ci-cd.yaml`.
+
+A deployment is triggered automatically on every `push` to the `ci-cd` branch.
+
+The pipeline performs the following steps:
+
+1.  **Authenticate to GCP**: Securely authenticates to Google Cloud using Workload Identity Federation.
+2.  **Identify Changes**: The `identify-services.sh` script checks which service directories have changed since the last commit and which services are not yet deployed to the cluster.
+3.  **Build and Push**: For each changed or missing service, the `build-and-push.sh` script builds a new Docker image, tags it with the commit SHA, and pushes it to your Google Artifact Registry repository.
+4.  **Deploy to GKE**: The `deploy-to-gke.sh` script applies the Kubernetes manifests for each service. It dynamically updates the image tag in the `Deployment` or `DaemonSet` manifest and waits for the rollout to complete successfully.
+
+## Directory Structure
+
+The project is organized to separate service code, Kubernetes configuration, and CI/CD logic.
+
 ```
-
-### 3️⃣ Install Istio
-```bash
-# Download Istio
-curl -L https://istio.io/downloadIstio | sh -
-
-# Install the demo profile
-istio-*/bin/istioctl install --set profile=demo -y
+go-blog-app/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yaml        # Main GitHub Actions workflow
+├── backend/                  # Source code for the backend service
+│   └── Dockerfile
+├── frontend/                 # Source code for the frontend service
+│   └── Dockerfile
+├── k8s/                      # All Kubernetes manifests
+│   ├── backend/              # Manifests for the backend service
+│   ├── frontend/             # Manifests for the frontend service
+│   ├── ...
+│   ├── db-config.yaml        # Shared database configuration
+│   ├── db-secret.yaml        # Secret for the database password
+│   └── rbac.yaml             # Shared RBAC roles and bindings
+├── scripts/                  # CI/CD helper scripts
+│   ├── build-and-push.sh
+│   ├── deploy-to-gke.sh
+│   └── identify-services.sh
+└── README.md                 # This file
 ```
-
-### 4️⃣ Enable Istio Sidecar Injection
-```bash
-# Label the default namespace for automatic Istio sidecar injection
-kubectl label namespace default istio-injection=enabled
-
-# Verify the label is applied
-kubectl get namespace -L istio-injection
-```
-
-### 5️⃣ Build Docker Images
-```bash
-# Build images for all services
-./scripts/build.sh
-
-# Verify images are built
-docker images
-```
-
-### 6️⃣ Deploy Application
-```bash
-# Deploy the Helm chart, CRD, and Istio configurations
-./scripts/helm-install.sh
-
-# Check pod status
-kubectl get pods
-```
-
-### 7️⃣ Access the Application
-```bash
-# Get the Istio Gateway URL
-minikube service istio-ingressgateway -n istio-system --url
-
-# The application will be accessible on the HTTP port (usually port 31116)
-# Frontend: http://<minikube-ip>:31116/
-# Backend API: http://<minikube-ip>:31116/api/
-
-# Example: http://192.168.49.2:31116/
-```
-
-### 8️⃣ Test PostgreSQL and Worker
-```bash
-# Get the Istio Gateway URL
-GATEWAY_URL=$(minikube service istio-ingressgateway -n istio-system --url | grep :31116)
-
-# Create a post via the backend API through Istio Gateway
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"title":"Test Post","content":"Hello World"}' \
-  $GATEWAY_URL/api/posts
-
-# Get all posts
-curl -s $GATEWAY_URL/api/posts
-
-# Verify the worker detects the post
-kubectl logs -l app=worker
-```
-
-### 9️⃣ Test CRD
-```bash
-# Create a BlogPost CRD resource through Istio Gateway
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"title":"CRD Test","content":"Hello CRD"}' \
-  $GATEWAY_URL/api/crd-posts
-
-# Get CRD posts via API
-curl -s $GATEWAY_URL/api/crd-posts
-
-# List BlogPost resources directly
-kubectl get blogposts
-```
-
-### 🔟 Verify Istio
-```bash
-# Check for mTLS and configuration issues
-istioctl analyze
-
-# View traffic logs (Istio sidecar)
-kubectl logs -l istio=envoy -c istio-proxy
-```
-
-### 1️⃣1️⃣ Clean Up
-```bash
-# Remove all resources
-./scripts/cleanup.sh
-
-# Stop Minikube
-minikube stop
-```
-
-## 🔍 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| 🔴 **Backend CrashLoopBackOff** | Check database connectivity: `kubectl logs <backend-pod> -c backend` |
-| 🟡 **Istio mTLS Issues** | Verify DestinationRules: `kubectl get destinationrules` |
-| 🟠 **Database Connection Reset** | Check if database has Istio sidecar disabled |
-| 🟢 **API Not Accessible** | Verify Istio Gateway: `kubectl get gateway,virtualservice` |
-| 🔵 **Frontend Can't Reach Backend** | Check if API URL uses relative path `/api` |
-| 🟣 **Istio Gateway Not Working** | Check ingress gateway: `kubectl get svc istio-ingressgateway -n istio-system` |
-| 🔶 **Resource Constraints** | Increase resources: `minikube start --memory=6144 --cpus=4` |
-
-## 🛡️ Security Architecture
-
-### Istio Service Mesh Security
-- ✅ **mTLS Enabled**: Automatic mutual TLS between services with Istio sidecars
-- ✅ **Gateway Routing**: All external traffic goes through Istio Gateway
-- ✅ **Backend Protection**: Backend service remains internal (ClusterIP only)
-- ✅ **Database Exception**: Database excluded from mTLS (no Istio sidecar)
-- ✅ **Traffic Policies**: Secure routing with VirtualServices and DestinationRules
-
-### Access Control
-```bash
-# Frontend (via Istio Gateway)
-https://<gateway-url>/                    # Static frontend
-
-# Backend API (via Istio Gateway)
-https://<gateway-url>/api/posts          # Blog posts API
-https://<gateway-url>/api/crd-posts      # CRD API
-
-# Internal Services (ClusterIP only)
-backend-service:8080                     # Not externally accessible
-db-service:5432                          # Not externally accessible
-```
-
-## ⚡ Kubernetes Components
-
-| Component | Purpose |
-|-----------|----------|
-| 📦 **Deployments** | Stateless workload management |
-| 🌐 **Services** | Internal/external communication |
-| 💾 **StatefulSet** | PostgreSQL with persistent identity |
-| 🔍 **DaemonSet** | Node-level logging |
-| 💿 **Volumes** | Persistent storage for data |
-| ⚙️ **ConfigMaps** | Configuration management |
-| 🔐 **Secrets** | Secure credential storage |
-| 🔑 **RBAC** | Access control |
-| 📦 **Helm** | Package management |
-
-## 📝 Notes
-
-- 💡 **Resource Optimization**: Low resource requests (50m CPU, 100Mi memory) for Minikube
-- 🔄 **GKE Migration**: Adapt for GKE by updating image references and resources
-- 📚 **Learning**: Experiment with Helm, CRDs, and Istio features
-
-For more help, check the 📚 Minikube, ⚓ Helm, 🔒 Istio, or ☸️ Kubernetes documentation.
