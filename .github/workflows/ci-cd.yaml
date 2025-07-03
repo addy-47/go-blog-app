@@ -1,8 +1,7 @@
-#ci-cd pipeline for building and deploying services to GKE using GitHub Actions
-# This workflow builds Docker images for each service, pushes them to Google Artifact Registry,
+# a ci-cd workflow for building and deploying services in a GKE cluster using Google Artifact Registry.
+# This workflow call scripts to build Docker images for each service, pushes them to Google Artifact Registry,
 # and deploys them to a GKE cluster. It also handles changes in the codebase
 # by checking which services have changed and only processing those.
-# The workflow is triggered on pushes to the ci-cd branch.
 
 name: Build and Deploy Services
 
@@ -12,16 +11,14 @@ on:
       - ci-cd 
 
 env:
-  # Use secrets for sensitive data like Project ID
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GCP_REGION: us-central1
   GAR_REPOSITORY: blog-app
   GKE_CLUSTER: blog-app-cluster
   GKE_REGION: us-central1
-  NAMESPACE: ci-cd # Define the namespace for deployments
-  K8S_DIR: k8s # Directory containing k8s manifests
-  # Define the services and their directories
-  # Format: <workload_name>:<directory>
+  NAMESPACE: ci-cd
+  K8S_DIR: k8s
+  SCRIPTS_DIR: scripts
   SERVICES: |
     frontend:frontend
     backend:backend
@@ -34,18 +31,16 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      # security-events: write # Optional: For uploading container scan results
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        # Fetch depth 0 is required to correctly diff against the previous commit
         with:
           fetch-depth: 0
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
-        with: # Using one Service Account with permissions for both Artifact Registry and GKE.
+        with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
 
@@ -58,51 +53,17 @@ jobs:
           cluster_name: ${{ env.GKE_CLUSTER }}
           location: ${{ env.GKE_REGION }}
 
+      - name: Make scripts executable
+        run: chmod +x ${{ env.SCRIPTS_DIR }}/*.sh
+
       - name: Identify services to process
         id: services_to_process
         run: |
-          # 1. Get services with changed files
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            echo "First push to branch, all services will be processed."
-            # Filter out comments and empty lines, then get the workload names
-            CHANGED_SERVICES=$(echo "${{ env.SERVICES }}" | grep -v -e '^$' -e '^\s*#' | cut -d: -f1 | tr '\n' ' ')
-          else
-            echo "Getting changed files between ${{ github.event.before }} and ${{ github.sha }}"
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-            CHANGED_SERVICES=""
-            # Use a here-string (<<<) to feed the while loop. This avoids creating a subshell
-            # for the loop, so the CHANGED_SERVICES variable is modified in the current shell.
-            while IFS=: read -r workload dir; do
-              [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty lines and comments
-              if echo "$CHANGED_FILES" | grep -q -E "^${dir}/"; then
-                echo "Changes detected in '$dir' for workload '$workload'"
-                CHANGED_SERVICES="$CHANGED_SERVICES $workload"
-              fi
-            done <<< "${{ env.SERVICES }}"
-          fi
-          echo "Changed services: $CHANGED_SERVICES"
-
-          # 2. Get services defined in SERVICES but not deployed in the cluster
-          echo "Checking for missing deployments in namespace '${{ env.NAMESPACE }}'..."
-          DEPLOYED_SERVICES=$(kubectl get deployment -n ${{ env.NAMESPACE }} -o jsonpath='{.items[*].metadata.name}' 2>/ci-cd/null || echo "")
-          echo "Currently deployed services: $DEPLOYED_SERVICES"
-
-          MISSING_SERVICES=""
-          # Use a here-string here as well to avoid the subshell issue.
-          while IFS=: read -r workload dir; do
-            [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty lines and comments
-            if ! echo "$DEPLOYED_SERVICES" | grep -q -w "$workload"; then
-              echo "Service '$workload' is not deployed."
-              MISSING_SERVICES="$MISSING_SERVICES $workload"
-            fi  
-          done <<< "${{ env.SERVICES }}"
-          echo "Missing services: $MISSING_SERVICES"
-
-          # 3. Combine and unique list of services to build and deploy
-          # Use xargs to handle splitting by spaces and creating a clean, unique list. This is more robust.
-          SERVICES_TO_PROCESS=$(echo "$CHANGED_SERVICES $MISSING_SERVICES" | xargs -n1 | sort -u | xargs)
-          echo "Services to process: $SERVICES_TO_PROCESS"
-          echo "services=${SERVICES_TO_PROCESS}" >> $GITHUB_OUTPUT
+          ${{ env.SCRIPTS_DIR }}/identify-services.sh \
+            "${{ env.SERVICES }}" \
+            "${{ env.NAMESPACE }}" \
+            "${{ github.event.before }}" \
+            "${{ github.sha }}"
 
       - name: Configure Docker for Artifact Registry
         if: steps.services_to_process.outputs.services != ''
@@ -111,44 +72,38 @@ jobs:
       - name: Build and Push Images
         if: steps.services_to_process.outputs.services != ''
         run: |
-          IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-5)
-          echo "Using image tag: $IMAGE_TAG"
-          while IFS=: read -r workload dir; do
-            [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty/commented lines
-            if echo "${{ steps.services_to_process.outputs.services }}" | grep -q -w "$workload"; then
-              echo "--- Processing image for '$workload' ---"
-              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
-              
-              echo "--- Building $IMAGE_PATH ---"
-              docker build -t $IMAGE_PATH -f ./$dir/Dockerfile ./$dir
-              
-              echo "--- Pushing $IMAGE_PATH ---"
-              docker push $IMAGE_PATH
-            fi
-          done <<< "${{ env.SERVICES }}"
+          IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-7)
+          REGISTRY_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}
+          
+          ${{ env.SCRIPTS_DIR }}/build-and-push.sh \
+            "${{ env.SERVICES }}" \
+            "${{ steps.services_to_process.outputs.services }}" \
+            "$IMAGE_TAG" \
+            "$REGISTRY_PATH"
 
       - name: Deploy to GKE
         if: steps.services_to_process.outputs.services != ''
         run: |
-          IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-5)
-          echo "Deploying with image tag: $IMAGE_TAG"
+          IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-7)
+          REGISTRY_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}
+          
+          ${{ env.SCRIPTS_DIR }}/deploy-to-gke.sh \
+            "${{ env.SERVICES }}" \
+            "${{ steps.services_to_process.outputs.services }}" \
+            "$IMAGE_TAG" \
+            "$REGISTRY_PATH" \
+            "${{ env.NAMESPACE }}" \
+            "${{ env.K8S_DIR }}"
 
-          while IFS=: read -r workload dir; do
-            [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty/commented lines
-            if echo "${{ steps.services_to_process.outputs.services }}" | grep -q -w "$workload"; then
-              echo "--- Deploying workload '$workload' ---"
-              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
+      - name: Notify on Success
+        if: success()
+        run: |
+          echo "🎉 Deployment successful!"
+          echo "Services processed: ${{ steps.services_to_process.outputs.services }}"
+          echo "Image tag: $(echo ${{ github.sha }} | cut -c1-7)"
 
-              # Assuming a manifest structure like k8s/<workload>/<manifest>.yaml
-              K8S_WORKLOAD_DIR="${{ env.K8S_DIR }}/${workload}"
-              if [ -d "$K8S_WORKLOAD_DIR" ]; then
-                echo "Applying all manifests in $K8S_WORKLOAD_DIR"
-                # Set the image for the deployment and apply all manifests in the directory
-                # This handles creation and updates for Deployments, Services, etc.
-                kubectl set image -f "${K8S_WORKLOAD_DIR}/deployment.yaml" ${workload}=${IMAGE_PATH} --local -o yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
-                kubectl apply -n ${{ env.NAMESPACE }} -f $K8S_WORKLOAD_DIR/service.yaml
-              else
-                echo "Warning: k8s directory not found at $K8S_WORKLOAD_DIR for workload '$workload'. Skipping deployment."
-              fi
-            fi
-          done <<< "${{ env.SERVICES }}"
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs above for details."

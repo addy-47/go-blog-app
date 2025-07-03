@@ -3,3 +3,5 @@ roadmap.md
 tfplan
 .terraform*
 terraform.tfstate*
+complex-ci-cd.yaml
+smart-ci-cd.yaml
