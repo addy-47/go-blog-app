@@ -58,14 +58,17 @@ deploy_service() {
     
     local deployment_file="$k8s_workload_dir/deployment.yaml"
     
-    # Handle deployment with image update
+    # Handle primary workload manifest (deployment, daemonset, etc.) with image update
     if [ -f "$deployment_file" ]; then
-        log "Applying deployment with updated image..."
+        local kind
+        kind=$(grep '^kind:' "$deployment_file" | awk '{print $2}')
+        log "Applying $kind with updated image..."
+
         if ! kubectl set image -f "$deployment_file" "${workload}=${image_path}" --local -o yaml | kubectl apply -n "$NAMESPACE" -f -; then
-            log "ERROR: Failed to apply deployment for $workload"
+            log "ERROR: Failed to apply $kind for $workload"
             return 1
         fi
-        log "✓ Deployment applied for $workload"
+        log "✓ $kind applied for $workload"
     else
         log "WARNING: deployment.yaml not found for $workload at $deployment_file"
     fi
@@ -86,14 +89,18 @@ deploy_service() {
         log "No additional manifests found for $workload"
     fi
     
-    # Wait for deployment to be ready
+    # Wait for the primary workload to be ready
     if [ -f "$deployment_file" ]; then
-        log "Waiting for deployment $workload to be ready..."
-        if ! kubectl rollout status deployment/"$workload" -n "$NAMESPACE" --timeout=300s; then
-            log "ERROR: Deployment $workload failed to become ready"
+        local kind
+        kind=$(grep '^kind:' "$deployment_file" | awk '{print $2}')
+        local kind_lower
+        kind_lower=$(echo "$kind" | tr '[:upper:]' '[:lower:]')
+        log "Waiting for $kind_lower $workload to be ready..."
+        if ! kubectl rollout status "$kind_lower/$workload" -n "$NAMESPACE" --timeout=300s; then
+            log "ERROR: $kind $workload failed to become ready"
             return 1
         fi
-        log "✓ Deployment $workload is ready"
+        log "✓ $kind $workload is ready"
     fi
     
     return 0
