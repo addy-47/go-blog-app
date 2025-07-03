@@ -106,7 +106,7 @@ jobs:
 
       - name: Configure Docker for Artifact Registry
         if: steps.services_to_process.outputs.services != ''
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.ci-cd --quiet
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
       - name: Build and Push Images
         if: steps.services_to_process.outputs.services != ''
@@ -117,7 +117,7 @@ jobs:
             [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty/commented lines
             if echo "${{ steps.services_to_process.outputs.services }}" | grep -q -w "$workload"; then
               echo "--- Processing image for '$workload' ---"
-              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.ci-cd/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
+              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
               
               echo "--- Building $IMAGE_PATH ---"
               docker build -t $IMAGE_PATH -f ./$dir/Dockerfile ./$dir
@@ -137,8 +137,8 @@ jobs:
             [[ -z "$workload" || "$workload" == \#* ]] && continue # Skip empty/commented lines
             if echo "${{ steps.services_to_process.outputs.services }}" | grep -q -w "$workload"; then
               echo "--- Deploying workload '$workload' ---"
-              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.ci-cd/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
-              
+              IMAGE_PATH=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/$workload:$IMAGE_TAG
+
               # Assuming a manifest structure like k8s/<workload>/<manifest>.yaml
               K8S_WORKLOAD_DIR="${{ env.K8S_DIR }}/${workload}"
               if [ -d "$K8S_WORKLOAD_DIR" ]; then
