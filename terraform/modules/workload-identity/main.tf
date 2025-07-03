@@ -1,5 +1,5 @@
 resource "google_iam_workload_identity_pool" "github_pool" {
-  workload_identity_pool_id = "github-pool"
+  workload_identity_pool_id = "github-pool-blog-app" # Made ID more specific to avoid collisions
   display_name              = "GitHub Actions WIP"
   description               = "Workload Identity Pool for GitHub Actions to access GCP resources"
   project                   = var.gcp_project_id
@@ -41,4 +41,3 @@ output "workload_identity_provider_name" {
   description = "The full name of the Workload Identity Provider for GitHub Actions."
   value       = google_iam_workload_identity_pool_provider.github_provider.name
 }
-
