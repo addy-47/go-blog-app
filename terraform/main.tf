@@ -5,26 +5,12 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0.0"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.0.0"
-    }
   }
 }
 
 provider "google" {
-  project = var.gcp_project_id
-  region  = var.gcp_region # Default region for resources
-}
-
-# Data source to get the access token for Kubernetes provider
-data "google_client_config" "default" {}
-
-# Kubernetes Provider configuration
-provider "kubernetes" {
-  host                   = "https://${module.gke_cluster.cluster_endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.gke_cluster.cluster_ca_certificate)
+  project = var.project_id
+  region  = var.region
 }
 
 # -----------------------------------------------------------------------------
@@ -33,65 +19,49 @@ provider "kubernetes" {
 
 # 1. Enable required GCP APIs
 module "gcp_project_setup" {
-  source         = "./modules/gcp-project-setup"
-  gcp_project_id = var.gcp_project_id
+  source         = "./modules/gcp_project_setup"
+  project_id = var.project_id
 }
 
-# 2. Create GCP Service Accounts and their project-level IAM bindings
-module "service_accounts" {
-  source         = "./modules/service-accounts"
-  gcp_project_id = var.gcp_project_id
-  depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
+# Creating service account for Cloud Build
+module "service_account" {
+  source             = "./modules/service_accounts"
+  project_id         = var.project_id
+  service_account_id = var.service_account_id
+  depends_on         = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
-# 3. Create GKE Cluster
-module "gke_cluster" {
-  source           = "./modules/gke-cluster"
-  gcp_project_id   = var.gcp_project_id
-  gcp_region       = var.gcp_region
-  gke_cluster_name = var.gke_cluster_name
-  depends_on       = [module.gcp_project_setup] # Ensure APIs are enabled first
+# Creating Compute Engine VM
+module "compute_engine" {
+  source                = "./modules/compute_engine"
+  project_id            = var.project_id
+  region                = var.region
+  zone                  = var.zone
+  vm_name               = var.vm_name
+  machine_type          = var.machine_type
+  service_account_email = module.service_account.service_account_email
+  depends_on            = [module.gcp_project_setup, module.artifact_registry, module.service_account]
 }
 
 # 4. Create Artifact Registry repository
 module "artifact_registry" {
-  source         = "./modules/artifact-registry"
-  gcp_project_id = var.gcp_project_id
-  gcp_region     = var.gcp_region
-  gar_repository = var.gar_repository
+  source         = "./modules/artifact_registry"
+  gcp_project_id = var.project_id
+  gcp_region     = var.region
+  gar_repository = var.artifact_repo_name
   depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
-# 5. Setup Workload Identity for GitHub Actions
-module "workload_identity" {
-  source                  = "./modules/workload-identity"
-  gcp_project_id          = var.gcp_project_id
-  github_repo             = var.github_repo
-  github_actions_sa_email = module.service_accounts.github_actions_sa_email
-  depends_on              = [module.gcp_project_setup] # Ensure APIs are enabled first
+
+# Setting up Secret Manager for GitHub SSH key
+module "secret_manager" {
+  source                = "./modules/secret_manager"
+  project_id            = var.project_id
+  secret_id             = var.secret_id
+  secret_data           = var.github_ssh_key
+  service_account_email = module.service_account.service_account_email
+  depends_on            = [module.gcp_project_setup, module.service_account]
 }
 
-# 6. Provision Kubernetes Namespaces for your services
-module "ci-cd_namespace" {
-  source     = "./modules/gke-namespace"
-  name       = "ci-cd"
-  depends_on = [module.gke_cluster] # Ensure cluster is ready
-}
 
-# 7. Example: Provision a Cloud SQL instance for your database service
-module "cloud_sql_instance" {
-  source         = "./modules/cloud-sql"
-  gcp_project_id = var.gcp_project_id
-  gcp_region     = var.gcp_region
-  database_name  = "blog-db"                  # Example database name
-  depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
-}
 
-# 8. Example: Provision a Secret Manager secret for your application
-module "app_secret" {
-  source                = "./modules/secret-manager"
-  gcp_project_id        = var.gcp_project_id
-  secret_name           = "my-app-secret" # Example secret name
-  app_workload_sa_email = module.service_accounts.app_workload_sa_email
-  depends_on            = [module.gcp_project_setup] # Ensure APIs are enabled first
-}

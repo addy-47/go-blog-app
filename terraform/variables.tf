@@ -1,28 +1,52 @@
-variable "gcp_project_id" {
-  description = "The GCP project ID."
+variable "project_id" {
+  description = "GCP Project ID"
   type        = string
 }
 
-variable "gcp_region" {
-  description = "The GCP region for resources."
+variable "region" {
+  description = "GCP Region"
   type        = string
-  default     = "us-central1" # Example default, adjust as needed
+  default     = "us-central1"
 }
 
-variable "gke_cluster_name" {
-  description = "The name of the GKE cluster."
+variable "zone" {
+  description = "GCP Zone"
   type        = string
-  default     = "blog-devops-cluster"
+  default     = "us-central1-a"
 }
 
-variable "gar_repository" {
-  description = "The ID of the Artifact Registry repository."
+variable "artifact_repo_name" {
+  description = "Artifact Registry repository name"
   type        = string
-  default     = "blog-devops-gar"
+  default     = "blog-app"
 }
 
-variable "github_repo" {
-  description = "The GitHub repository (e.g., 'owner/repo') for Workload Identity."
+variable "vm_name" {
+  description = "Name of the Compute Engine VM"
   type        = string
-  # Example: "addy-47/ci-cd-k8s" - Make sure to set this to your actual repo!
+  default     = "blog-vm"
+}
+
+variable "machine_type" {
+  description = "Machine type for the VM"
+  type        = string
+  default     = "e2-medium"
+}
+
+variable "secret_id" {
+  description = "Secret ID for GitHub SSH key in Secret Manager"
+  type        = string
+  default     = "github-ssh-key"
+}
+
+variable "github_ssh_key" {
+  description = "GitHub SSH private key for repository access"
+  type        = string
+  sensitive   = true
+}
+
+variable "service_account_id" {
+  description = "ID for the Cloud Build service account"
+  type        = string
+  default     = "cloudbuild-sa"
 }
