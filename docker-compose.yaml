@@ -1,23 +1,57 @@
 version: '3.8'
 services:
   backend:
-    build: ./backend
+    image: us-central1-docker.pkg.dev/go-blog-app-0/blog-app/backend:$SHORT_SHA
     ports:
       - "8080:8080"
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=blog
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - blog-network
+    restart: unless-stopped
+
   frontend:
-    build: ./frontend
+    image: us-central1-docker.pkg.dev/go-blog-app-0/blog-app/frontend:$SHORT_SHA
     ports:
       - "80:80"
     depends_on:
       - backend
+    environment:
+      - BACKEND_URL=http://backend:8080
+    networks:
+      - blog-network
+    restart: unless-stopped
+
   logging-agent:
-    build: ./logging-agent
+    image: us-central1-docker.pkg.dev/go-blog-app-0/blog-app/logging-agent:$SHORT_SHA
+    environment:
+      - LOG_LEVEL=info
+    networks:
+      - blog-network
+    restart: unless-stopped
+
   worker:
-    build: ./worker
+    image: us-central1-docker.pkg.dev/go-blog-app-0/blog-app/worker:$SHORT_SHA
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=blog
+    networks:
+      - blog-network
+    restart: unless-stopped
+
   db:
     image: postgres:13
     environment:
@@ -26,3 +60,21 @@ services:
       - POSTGRES_DB=blog
     ports:
       - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d blog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blog-network
+    restart: unless-stopped
+
+volumes:
+  db-data:
+    name: blog-db-data
+
+networks:
+  blog-network:
+    driver: bridge
