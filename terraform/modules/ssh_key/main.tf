@@ -1,5 +1,5 @@
 resource "tls_private_key" "cloudbuild_ssh" {
-     algorithm = "ED25519"
+    algorithm = "ED25519"
 }
 
 resource "google_secret_manager_secret" "cloudbuild_vm_ssh_key" {
@@ -13,7 +13,7 @@ resource "google_secret_manager_secret" "cloudbuild_vm_ssh_key" {
 
 resource "google_secret_manager_secret_version" "cloudbuild_vm_ssh_key_version" {
     secret      = google_secret_manager_secret.cloudbuild_vm_ssh_key.id
-    secret_data = tls_private_key.cloudbuild_ssh.private_key_pem
+    secret_data = chomp(tls_private_key.cloudbuild_ssh.private_key_openssh)
 }
 
 resource "google_secret_manager_secret_iam_member" "cloudbuild_access" {
