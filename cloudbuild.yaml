@@ -7,14 +7,15 @@ steps:
       - -c
       - |
         if [ -z "${_REGION}" ] || [ -z "${_PROJECT_ID}" ] || [ -z "${_GAR_REPO}" ] || \
-           [ -z "${_VM_NAME}" ] || [ -z "${_VM_ZONE}" ] || \
-           [ -z "${SHORT_SHA}" ] || [ -z "${BRANCH_NAME}" ]; then
+          [ -z "${_VM_NAME}" ] || [ -z "${_VM_ZONE}" ] || \
+          [ -z "${SHORT_SHA}" ] || [ -z "${BRANCH_NAME}" ]; then
           echo "Error: One or more required substitutions are missing."
           exit 1
         fi
 
-  # Step 1: SSH setup
-  - name: 'gcr.io/cloud-builders/git'
+  # Step 1: Clone repository with SSH
+  - name: 'gcr.io/cloud-builders/git:latest'
+    id: 'clone-repo'
     secretEnv: ['SSH_KEY']
     entrypoint: 'bash'
     args:
@@ -22,25 +23,17 @@ steps:
       - |
         mkdir -p /root/.ssh
         echo "$$SSH_KEY" > /root/.ssh/id_rsa
-        chmod 400 /root/.ssh/id_rsa
-        ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts
+        chmod 600 /root/.ssh/id_rsa
+        ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
+        git clone --recurse-submodules git@github.com:addy-47/go-blog-app.git
+        cd go-blog-app
+        git checkout $BRANCH_NAME
     volumes:
       - name: 'ssh'
         path: /root/.ssh
 
-  # Step 2: Clone repository
-  - name: 'gcr.io/cloud-builders/git'
-    id: 'clone-repo'
-    args:
-      - clone
-      - --recurse-submodules
-      - git@github.com:addy-47/go-blog-app.git
-    volumes:
-      - name: 'ssh'
-        path: /root/.ssh
-
-  # Step 3: Detect changed services
-  - name: 'gcr.io/cloud-builders/git'
+  # Step 2: Detect changed services
+  - name: 'gcr.io/cloud-builders/git:latest'
     id: 'detect-changes'
     entrypoint: 'bash'
     args:
@@ -68,8 +61,11 @@ steps:
         done
         echo "$changed_services" > /workspace/changed_services.txt
         echo "Changed services: $changed_services"
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
 
-  # Step 4: Check if changes exist
+  # Step 3: Check if changes exist
   - name: 'bash'
     id: 'check-if-changes-exist'
     entrypoint: 'bash'
@@ -81,7 +77,7 @@ steps:
           exit 0
         fi
 
-  # Step 5: Validate Artifact Registry repository
+  # Step 4: Validate Artifact Registry repository
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'validate-artifact-repo'
     waitFor: ['check-if-changes-exist']
@@ -92,7 +88,7 @@ steps:
         gcloud artifacts repositories describe ${_GAR_REPO} --location=${_REGION} --project=${_PROJECT_ID} || \
           (echo "Error: Artifact Repository ${_GAR_REPO} does not exist in ${_REGION}." && exit 1)
 
-  # Step 6: Build and push Docker images
+  # Step 5: Build and push Docker images
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-and-push'
     waitFor: ['validate-artifact-repo']
@@ -116,7 +112,7 @@ steps:
       - name: 'ssh'
         path: /root/.ssh
 
-  # Step 7: Update docker-compose file
+  # Step 6: Update docker-compose file
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'update-docker-compose'
     waitFor: ['build-and-push', 'detect-changes']
@@ -133,12 +129,17 @@ steps:
             sed -i "s|\(image: $image_name:\)[a-f0-9]\{7\}\|\1$SHORT_SHA|" docker-compose.yaml
             echo "Updated image tag for $service_name in docker-compose.yaml to $SHORT_SHA"
           done
+          git config --global user.name "Cloud Build"
+          git config --global user.email "cloudbuild@go-blog-app-0.iam.gserviceaccount.com"
+          git add docker-compose.yaml
+          git commit -m "Update docker-compose.yaml with new image tags"
+          git push origin $BRANCH_NAME
         fi
     volumes:
       - name: 'ssh'
         path: /root/.ssh
 
-  # Step 8: SSH into VM, perform git pull, docker-compose down, pull, and up
+  # Step 7: SSH into VM, perform git pull, docker-compose down, pull, and up
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'ssh-and-deploy'
     waitFor: ['update-docker-compose']
@@ -167,7 +168,6 @@ substitutions:
   _GAR_REPO: blog-app
   _VM_NAME: blog-vm
   _VM_ZONE: us-central1-a
-  _BRANCH_NAME: cloudbuild
 
 options:
   substitutionOption: "ALLOW_LOOSE"
