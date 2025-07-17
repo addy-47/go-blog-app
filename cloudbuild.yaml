@@ -25,16 +25,11 @@ steps:
         echo "$$SSH_KEY" > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
-        
-        # Clone with proper error handling
         if ! git clone --recurse-submodules git@github.com:addy-47/go-blog-app.git; then
           echo "Failed to clone repository. Check SSH key and repository access."
           exit 1
         fi
-        
         cd go-blog-app
-        
-        # Check if branch exists before checkout
         if git show-ref --verify --quiet refs/remotes/origin/$BRANCH_NAME; then
           git checkout $BRANCH_NAME
         else
@@ -54,38 +49,26 @@ steps:
       - -c
       - |
         cd go-blog-app
-        
-        # Handle first commit case
         if [ $(git rev-list --count HEAD) -eq 1 ]; then
           echo "First commit detected, checking all files"
           changed_files=$(git ls-tree -r HEAD --name-only)
         else
           changed_files=$(git diff --name-only HEAD^ HEAD)
         fi
-        
         echo "Changed files: $changed_files"
-        
-        # Filter for service directories
         changed_files=$(echo "$changed_files" | grep -E "^(frontend|backend|logging-agent|worker)/" || true)
-        
-        # Find all services with Dockerfiles
         services=$(find frontend backend logging-agent worker -type f -name Dockerfile 2>/dev/null | sed 's|/Dockerfile||' || true)
-        
         if [ -z "$services" ]; then
           echo "Error: No services with Dockerfiles found in specified directories."
           exit 1
         fi
-        
         echo "Detected services: $services"
-        
-        # Determine which services changed
         changed_services=""
         for service in $services; do
           if echo "$changed_files" | grep -q "^$service/" || [ -z "$changed_files" ]; then
             changed_services="$changed_services $service"
           fi
         done
-        
         echo "$changed_services" > /workspace/changed_services.txt
         echo "Changed services: $changed_services"
     volumes:
@@ -129,33 +112,23 @@ steps:
       - |
         cd go-blog-app
         changed_services=$(cat /workspace/changed_services.txt)
-        
         if [ -z "$changed_services" ]; then
           echo "No services changed. Skipping build."
           exit 0
         fi
-        
-        # Authenticate with Artifact Registry
         gcloud auth configure-docker ${_REGION}-docker.pkg.dev
-        
         for service in $changed_services; do
           service_name=$(basename "$service" | tr '[:upper:]' '[:lower:]')
           image_tag="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name:$SHORT_SHA"
-          
           echo "Building and pushing $service_name (original: $service)..."
-          
-          # Check if Dockerfile exists
           if [ ! -f "$service/Dockerfile" ]; then
             echo "Error: Dockerfile not found in $service/"
             exit 1
           fi
-          
-          # Build and push with error handling
           if ! docker build -t "$image_tag" "$service"; then
             echo "Failed to build $service_name"
             exit 1
           fi
-          
           if ! docker push "$image_tag"; then
             echo "Failed to push $service_name"
             exit 1
@@ -175,29 +148,20 @@ steps:
       - |
         cd go-blog-app
         changed_services=$(cat /workspace/changed_services.txt)
-        
         if [ -n "$changed_services" ]; then
           for service in $changed_services; do
             service_name=$(basename "$service" | tr '[:upper:]' '[:lower:]')
             image_name="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name"
-            
-            # More robust sed command
             sed -i "s|\(image: $image_name:\)[a-f0-9]\{7\}\|\1$SHORT_SHA|" docker-compose.yaml
             echo "Updated image tag for $service_name in docker-compose.yaml to $SHORT_SHA"
           done
-          
-          # Configure git with proper SSH
           git config --global user.name "Cloud Build"
           git config --global user.email "cloudbuild@go-blog-app-0.iam.gserviceaccount.com"
-          
-          # Check if there are changes to commit
           if git diff --quiet docker-compose.yaml; then
             echo "No changes to docker-compose.yaml"
           else
             git add docker-compose.yaml
             git commit -m "Update docker-compose.yaml with new image tags for commit $SHORT_SHA"
-            
-            # Push with error handling
             if ! git push origin $BRANCH_NAME; then
               echo "Failed to push changes to repository"
               exit 1
@@ -209,27 +173,36 @@ steps:
         path: /root/.ssh
 
   # Step 7: SSH into VM, perform git pull, docker-compose down, pull, and up
-  - name: 'gcr.io/cloud-builders/gcloud'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'ssh-and-deploy'
     waitFor: ['update-docker-compose']
     timeout: '1200s'
+    secretEnv: ['SSH_KEY', 'VM_SSH_KEY']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        gcloud compute ssh ${_VM_NAME} --zone ${_VM_ZONE} --command "
-        cd /var/www/go-blog-app && 
-        git pull && 
-        docker-compose -f docker-compose.yaml down && 
-        docker-compose -f docker-compose.yaml pull && 
-        docker-compose -f docker-compose.yaml up -d && 
-        sudo systemctl restart nginx
-        " --ssh-flag="-o StrictHostKeyChecking=no"
+        mkdir -p /root/.ssh
+        echo "$$VM_SSH_KEY" > /root/.ssh/id_rsa
+        chmod 600 /root/.ssh/id_rsa
+        ssh-keyscan -t rsa,ecdsa,ed25519 35.226.41.122 >> /root/.ssh/known_hosts
+        ssh -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@35.226.41.122 \
+          "cd /var/www/go-blog-app && \
+          git pull && \
+          docker-compose -f docker-compose.yaml down && \
+          docker-compose -f docker-compose.yaml pull && \
+          docker-compose -f docker-compose.yaml up -d && \
+          sudo systemctl restart nginx"
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
 
 availableSecrets:
   secretManager:
     - versionName: projects/${_PROJECT_ID}/secrets/github-ssh-key/versions/latest
       env: 'SSH_KEY'
+    - versionName: projects/${_PROJECT_ID}/secrets/cloudbuild-vm-ssh-key/versions/latest
+      env: 'VM_SSH_KEY'
 
 serviceAccount: 'projects/${_PROJECT_ID}/serviceAccounts/cloudbuild-sa@${_PROJECT_ID}.iam.gserviceaccount.com'
 
@@ -240,7 +213,7 @@ substitutions:
   _VM_NAME: blog-vm
   _VM_ZONE: us-central1-a
   _BRANCH_NAME: cloudbuild
-  
+
 options:
   substitutionOption: "ALLOW_LOOSE"
   dynamicSubstitutions: true

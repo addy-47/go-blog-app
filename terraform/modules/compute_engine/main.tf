@@ -18,6 +18,10 @@ resource "google_compute_instance" "vm" {
     }
   }
 
+  metadata = {
+    ssh-keys = "cloudbuild:${var.ssh_public_key}"
+  }
+
   metadata_startup_script = <<-EOF
     #!/bin/bash
     apt-get update
@@ -33,6 +37,8 @@ resource "google_compute_instance" "vm" {
     email  = var.service_account_email
     scopes = ["cloud-platform"]
   }
+
+  tags = ["http-server", "ssh"]
 }
 
 variable "project_id" {
@@ -62,6 +68,11 @@ variable "machine_type" {
 
 variable "service_account_email" {
   description = "Service account email for the VM"
+  type        = string
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key for Cloud Build access to the VM"
   type        = string
 }
 

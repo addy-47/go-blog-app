@@ -31,6 +31,14 @@ module "service_account" {
   depends_on         = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
+# Creating SSH key for Cloud Build to VM access
+module "ssh_key" {
+  source                = "./modules/ssh_key"
+  project_id            = var.project_id
+  service_account_email = module.service_account.service_account_email
+  depends_on            = [module.gcp_project_setup, module.service_account]
+}
+
 # Creating Compute Engine VM
 module "compute_engine" {
   source                = "./modules/compute_engine"
@@ -40,7 +48,8 @@ module "compute_engine" {
   vm_name               = var.vm_name
   machine_type          = var.machine_type
   service_account_email = module.service_account.service_account_email
-  depends_on            = [module.gcp_project_setup, module.artifact_registry, module.service_account]
+  ssh_public_key        = module.ssh_key.ssh_public_key
+  depends_on            = [module.gcp_project_setup, module.artifact_registry, module.service_account, module.ssh_key]
 }
 
 # 4. Create Artifact Registry repository
@@ -51,7 +60,6 @@ module "artifact_registry" {
   gar_repository = var.artifact_repo_name
   depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
-
 
 # Setting up Secret Manager for GitHub SSH key
 module "secret_manager" {
