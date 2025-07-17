@@ -172,5 +172,5 @@ substitutions:
 options:
   substitutionOption: "ALLOW_LOOSE"
   dynamicSubstitutions: true
-  logging: GCS_ONLY
+  logging: NONE
 timeout: 7200s
