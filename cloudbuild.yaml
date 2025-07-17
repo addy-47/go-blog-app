@@ -1,0 +1,177 @@
+steps:
+  # Step 0: Validate substitutions
+  - name: 'bash'
+    id: 'validate-substitutions'
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        if [ -z "${_REGION}" ] || [ -z "${_PROJECT_ID}" ] || [ -z "${_GAR_REPO}" ] || \
+           [ -z "${_VM_NAME}" ] || [ -z "${_VM_ZONE}" ] || \
+           [ -z "${SHORT_SHA}" ] || [ -z "${BRANCH_NAME}" ]; then
+          echo "Error: One or more required substitutions are missing."
+          exit 1
+        fi
+
+  # Step 1: SSH setup
+  - name: 'gcr.io/cloud-builders/git'
+    secretEnv: ['SSH_KEY']
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        mkdir -p /root/.ssh
+        echo "$$SSH_KEY" > /root/.ssh/id_rsa
+        chmod 400 /root/.ssh/id_rsa
+        ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+
+  # Step 2: Clone repository
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'clone-repo'
+    args:
+      - clone
+      - --recurse-submodules
+      - git@github.com:addy-47/go-blog-app.git
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+
+  # Step 3: Detect changed services
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'detect-changes'
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        cd go-blog-app
+        git fetch origin $BRANCH_NAME --depth=2
+        git checkout $BRANCH_NAME
+        echo "Latest commit:"
+        git log -1 --oneline
+        changed_files=$(git diff --name-only HEAD^ HEAD 2>/dev/null || git ls-tree -r HEAD --name-only)
+        echo "Changed files: $changed_files"
+        changed_files=$(echo "$changed_files" | grep -E "^(frontend|backend|logging-agent|worker)/")
+        services=$(find frontend backend logging-agent worker -type f -name Dockerfile | sed 's|/Dockerfile||')
+        if [ -z "$services" ]; then
+          echo "Error: No services with Dockerfiles found in specified directories."
+          exit 1
+        fi
+        echo "Detected services: $services"
+        changed_services=""
+        for service in $services; do
+          if echo "$changed_files" | grep -q "^$service/"; then
+            changed_services="$changed_services $service"
+          fi
+        done
+        echo "$changed_services" > /workspace/changed_services.txt
+        echo "Changed services: $changed_services"
+
+  # Step 4: Check if changes exist
+  - name: 'bash'
+    id: 'check-if-changes-exist'
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        if [ ! -s /workspace/changed_services.txt ]; then
+          echo "No changed services detected. Skipping remaining steps."
+          exit 0
+        fi
+
+  # Step 5: Validate Artifact Registry repository
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'validate-artifact-repo'
+    waitFor: ['check-if-changes-exist']
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        gcloud artifacts repositories describe ${_GAR_REPO} --location=${_REGION} --project=${_PROJECT_ID} || \
+          (echo "Error: Artifact Repository ${_GAR_REPO} does not exist in ${_REGION}." && exit 1)
+
+  # Step 6: Build and push Docker images
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-and-push'
+    waitFor: ['validate-artifact-repo']
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        cd go-blog-app
+        changed_services=$(cat /workspace/changed_services.txt)
+        if [ -z "$changed_services" ]; then
+          echo "No services changed. Skipping build."
+          exit 0
+        fi
+        for service in $changed_services; do
+          service_name=$(basename "$service" | tr '[:upper:]' '[:lower:]')
+          echo "Building and pushing $service_name (original: $service)..."
+          docker build -t ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name:$SHORT_SHA $service
+          docker push ${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name:$SHORT_SHA
+        done
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+
+  # Step 7: Update docker-compose file
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'update-docker-compose'
+    waitFor: ['build-and-push', 'detect-changes']
+    entrypoint: 'bash'
+    args:
+      - -c
+      - |
+        cd go-blog-app
+        changed_services=$(cat /workspace/changed_services.txt)
+        if [ -n "$changed_services" ]; then
+          for service in $changed_services; do
+            service_name=$(basename "$service" | tr '[:upper:]' '[:lower:]')
+            image_name="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name"
+            sed -i "s|\(image: $image_name:\)[a-f0-9]\{7\}\|\1$SHORT_SHA|" docker-compose.yaml
+            echo "Updated image tag for $service_name in docker-compose.yaml to $SHORT_SHA"
+          done
+        fi
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+
+  # Step 8: SSH into VM, perform git pull, docker-compose down, pull, and up
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'ssh-and-deploy'
+    waitFor: ['update-docker-compose']
+    timeout: '1200s'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud compute ssh ${_VM_NAME} --zone ${_VM_ZONE} --command "cd /var/www/go-blog-app && \
+        git pull && \
+        docker-compose -f docker-compose.yaml down && \
+        docker-compose -f docker-compose.yaml pull && \
+        docker-compose -f docker-compose.yaml up -d && \
+        sudo systemctl restart nginx"
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/${_PROJECT_ID}/secrets/github-ssh-key/versions/latest
+      env: 'SSH_KEY'
+
+serviceAccount: 'projects/${_PROJECT_ID}/serviceAccounts/cloudbuild-sa@${_PROJECT_ID}.iam.gserviceaccount.com'
+
+substitutions:
+  _REGION: us-central1
+  _PROJECT_ID: go-blog-app-0
+  _GAR_REPO: blog-app
+  _VM_NAME: blog-vm
+  _VM_ZONE: us-central1-a
+  _BRANCH_NAME: cloudbuild
+
+logsBucket: "gs://go-blog-app-0-cloudbuild-logs"
+options:
+  substitutionOption: "ALLOW_LOOSE"
+  dynamicSubstitutions: true
+  logging: GCS_ONLY
+timeout: 7200s
