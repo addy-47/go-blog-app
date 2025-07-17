@@ -149,12 +149,17 @@ steps:
         cd go-blog-app
         changed_services=$(cat /workspace/changed_services.txt)
         if [ -n "$changed_services" ]; then
+          echo "Current docker-compose.yaml content:"
+          cat docker-compose.yaml
           for service in $changed_services; do
             service_name=$(basename "$service" | tr '[:upper:]' '[:lower:]')
             image_name="${_REGION}-docker.pkg.dev/${_PROJECT_ID}/${_GAR_REPO}/$service_name"
-            sed -i "s|\(image: $image_name:\)[a-f0-9]\{7\}\|\1$SHORT_SHA|" docker-compose.yaml
+            # Replace image tag with SHORT_SHA
+            sed -i "/image:.*$service_name:/s/:.*$/:$SHORT_SHA/" docker-compose.yaml
             echo "Updated image tag for $service_name in docker-compose.yaml to $SHORT_SHA"
           done
+          echo "Updated docker-compose.yaml content:"
+          cat docker-compose.yaml
           git config --global user.name "Cloud Build"
           git config --global user.email "cloudbuild@go-blog-app-0.iam.gserviceaccount.com"
           if git diff --quiet docker-compose.yaml; then
@@ -185,9 +190,12 @@ steps:
         mkdir -p /root/.ssh
         echo "$$VM_SSH_KEY" > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
+        echo "Debug: SSH key content (first line):"
+        head -n 1 /root/.ssh/id_rsa
         ssh-keyscan -t rsa,ecdsa,ed25519 35.226.41.122 >> /root/.ssh/known_hosts
-        ssh -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@35.226.41.122 \
-          "cd /var/www/go-blog-app && \
+        ssh -v -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@35.226.41.122 \
+          "whoami && \
+          cd /var/www/go-blog-app && \
           git pull && \
           docker-compose -f docker-compose.yaml down && \
           docker-compose -f docker-compose.yaml pull && \

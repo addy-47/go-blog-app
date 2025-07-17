@@ -31,7 +31,16 @@ resource "google_compute_instance" "vm" {
     mkdir -p /var/www/go-blog-app
     chown -R www-data:www-data /var/www/go-blog-app
     gcloud auth configure-docker ${var.region}-docker.pkg.dev
-  EOF
+
+    # Set up SSH for GitHub
+    mkdir -p /root/.ssh
+    gcloud secrets versions access latest --secret=github-ssh-key --project=${var.project_id} > /root/.ssh/id_rsa
+    chmod 600 /root/.ssh/id_rsa
+    ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
+
+    # Clone the repository as www-data
+    su - www-data -c "git clone -b cloudbuild git@github.com:addy-47/go-blog-app.git /var/www/go-blog-app"
+    EOF
 
   service_account {
     email  = var.service_account_email
