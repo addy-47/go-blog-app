@@ -172,5 +172,5 @@ substitutions:
 options:
   substitutionOption: "ALLOW_LOOSE"
   dynamicSubstitutions: true
-  logging: NONE
+  logging: CLOUD_LOGGING_ONLY
 timeout: 7200s
