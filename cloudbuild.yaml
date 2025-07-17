@@ -169,7 +169,6 @@ substitutions:
   _VM_ZONE: us-central1-a
   _BRANCH_NAME: cloudbuild
 
-logsBucket: "gs://go-blog-app-0-cloudbuild-logs"
 options:
   substitutionOption: "ALLOW_LOOSE"
   dynamicSubstitutions: true
