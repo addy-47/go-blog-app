@@ -240,6 +240,7 @@ substitutions:
   _VM_NAME: blog-vm
   _VM_ZONE: us-central1-a
   _BRANCH_NAME: cloudbuild
+  
 options:
   substitutionOption: "ALLOW_LOOSE"
   dynamicSubstitutions: true
