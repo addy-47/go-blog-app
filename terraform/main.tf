@@ -71,5 +71,11 @@ module "secret_manager" {
   depends_on            = [module.gcp_project_setup, module.service_account]
 }
 
+module "firewall" {
+  source     = "./modules/firewall"
+  project_id = var.project_id
+  depends_on = [module.gcp_project_setup]
+}
+
 
 

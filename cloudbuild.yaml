@@ -192,8 +192,16 @@ steps:
         chmod 600 /root/.ssh/id_rsa
         echo "Debug: SSH key content (first line):"
         head -n 1 /root/.ssh/id_rsa
-        ssh-keyscan -t rsa,ecdsa,ed25519 35.226.41.122 >> /root/.ssh/known_hosts
-        ssh -v -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@35.226.41.122 \
+        # Get VM's external IP
+        VM_IP=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+        echo "Debug: VM IP is $VM_IP"
+        # Test network reachability
+        echo "Debug: Pinging VM..."
+        ping -c 3 $VM_IP || echo "Warning: Ping to $VM_IP failed"
+        # Add VM to known_hosts
+        ssh-keyscan -t rsa,ecdsa,ed25519 $VM_IP >> /root/.ssh/known_hosts 2>/dev/null
+        # SSH with verbose output
+        ssh -v -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@$VM_IP \
           "whoami && \
           cd /var/www/go-blog-app && \
           git pull && \
