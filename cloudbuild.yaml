@@ -194,17 +194,17 @@ steps:
         head -n 1 /root/.ssh/id_rsa
         # Get VM's external IP using substitutions
         VM_IP=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-        echo "Debug: VM IP is $VM_IP"
+        echo "Debug: VM IP is $$VM_IP"
         # Test network reachability
         echo "Debug: Pinging VM..."
-        ping -c 3 $VM_IP || echo "Warning: Ping to $VM_IP failed"
+        ping -c 3 $$VM_IP || echo "Warning: Ping to $$VM_IP failed"
         # Check if VM is running
         VM_STATUS=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(status)')
-        echo "Debug: VM status is $VM_STATUS"
+        echo "Debug: VM status is $$VM_STATUS"
         # Add VM to known_hosts
-        ssh-keyscan -t rsa,ecdsa,ed25519 $VM_IP >> /root/.ssh/known_hosts 2>/dev/null
+        ssh-keyscan -t rsa,ecdsa,ed25519 $$VM_IP >> /root/.ssh/known_hosts 2>/dev/null
         # SSH with verbose output
-        ssh -v -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@$VM_IP \
+        ssh -v -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no cloudbuild@$$VM_IP \
           "whoami && \
           cd /var/www/go-blog-app && \
           git pull && \
