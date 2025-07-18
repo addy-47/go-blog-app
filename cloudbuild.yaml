@@ -177,7 +177,7 @@ steps:
       - name: 'ssh'
         path: /root/.ssh
 
-  # Step 7: SSH into VM, perform git pull, docker-compose down, pull, and up
+# Step 7: SSH into VM, perform git pull, docker-compose down, pull, and up
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'ssh-and-deploy'
     waitFor: ['update-docker-compose']
@@ -192,14 +192,14 @@ steps:
         chmod 600 /root/.ssh/id_rsa
         echo "Debug: SSH key content (first line):"
         head -n 1 /root/.ssh/id_rsa
-        # Get VM's external IP
-        VM_IP=$(gcloud compute instances describe blog-vm --zone=us-central1-a --project=go-blog-app-0 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+        # Get VM's external IP using substitutions
+        VM_IP=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
         echo "Debug: VM IP is $VM_IP"
         # Test network reachability
         echo "Debug: Pinging VM..."
         ping -c 3 $VM_IP || echo "Warning: Ping to $VM_IP failed"
         # Check if VM is running
-        VM_STATUS=$(gcloud compute instances describe blog-vm --zone=us-central1-a --project=go-blog-app-0 --format='get(status)')
+        VM_STATUS=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(status)')
         echo "Debug: VM status is $VM_STATUS"
         # Add VM to known_hosts
         ssh-keyscan -t rsa,ecdsa,ed25519 $VM_IP >> /root/.ssh/known_hosts 2>/dev/null
@@ -215,7 +215,7 @@ steps:
     volumes:
       - name: 'ssh'
         path: /root/.ssh
-
+        
 availableSecrets:
   secretManager:
     - versionName: projects/${_PROJECT_ID}/secrets/github-ssh-key/versions/latest
