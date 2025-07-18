@@ -188,16 +188,19 @@ steps:
       - '-c'
       - |
         mkdir -p /root/.ssh
-        echo "$$VM_SSH_KEY" > /root/.ssh/id_rsa
+        echo "$VM_SSH_KEY" > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         echo "Debug: SSH key content (first line):"
         head -n 1 /root/.ssh/id_rsa
         # Get VM's external IP
-        VM_IP=$(gcloud compute instances describe ${_VM_NAME} --zone=${_VM_ZONE} --project=${_PROJECT_ID} --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+        VM_IP=$(gcloud compute instances describe blog-vm --zone=us-central1-a --project=go-blog-app-0 --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
         echo "Debug: VM IP is $VM_IP"
         # Test network reachability
         echo "Debug: Pinging VM..."
         ping -c 3 $VM_IP || echo "Warning: Ping to $VM_IP failed"
+        # Check if VM is running
+        VM_STATUS=$(gcloud compute instances describe blog-vm --zone=us-central1-a --project=go-blog-app-0 --format='get(status)')
+        echo "Debug: VM status is $VM_STATUS"
         # Add VM to known_hosts
         ssh-keyscan -t rsa,ecdsa,ed25519 $VM_IP >> /root/.ssh/known_hosts 2>/dev/null
         # SSH with verbose output
