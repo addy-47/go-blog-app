@@ -21,10 +21,24 @@ steps:
     args:
       - -c
       - |
+        set -e
         mkdir -p /root/.ssh
-        echo "$$_SSH_KEY" > /root/.ssh/id_rsa
+        echo "$SSH_KEY" > /root/.ssh/id_rsa
         chmod 400 /root/.ssh/id_rsa
-        ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
+
+        echo "===== id_rsa content ====="
+        cat /root/.ssh/id_rsa
+
+        echo "===== id_rsa line endings ====="
+        cat -A /root/.ssh/id_rsa
+
+        ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+        echo "===== Testing SSH connection ====="
+        ssh -i /root/.ssh/id_rsa -T git@github.com
+
+        echo "===== Cloning repository ====="
+        git clone git@github.com:your-org/your-repo.git
         if ! git clone git@github.com:addy-47/go-blog-app.git; then
           echo "Failed to clone repository. Check SSH key and repository access."
           exit 1
