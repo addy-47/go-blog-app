@@ -31,12 +31,11 @@ module "service_account" {
   depends_on         = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
-# Creating SSH key for Cloud Build to VM access
-module "ssh_key" {
-  source                = "./modules/ssh_key"
-  project_id            = var.project_id
-  service_account_email = module.service_account.service_account_email
-  depends_on            = [module.gcp_project_setup, module.service_account]
+module "secrets" {
+  source            = "./modules/secrets"
+  project_id        = var.project_id
+  github_repository = var.github_repository
+  depends_on        = [module.service_accounts]
 }
 
 # Creating Compute Engine VM
@@ -61,21 +60,17 @@ module "artifact_registry" {
   depends_on     = [module.gcp_project_setup] # Ensure APIs are enabled first
 }
 
-# Setting up Secret Manager for GitHub SSH key
-module "secret_manager" {
-  source                = "./modules/secret_manager"
-  project_id            = var.project_id
-  secret_id             = var.secret_id
-  secret_data           = var.github_ssh_key
-  service_account_email = module.service_account.service_account_email
-  depends_on            = [module.gcp_project_setup, module.service_account]
-}
-
 module "firewall" {
   source     = "./modules/firewall"
   project_id = var.project_id
   depends_on = [module.gcp_project_setup]
 }
 
+module "budget" {
+  source                = "./modules/budget"
+  project_id            = var.project_id
+  budget_amount         = var.budget_amount
+  notification_channel  = var.gchat_webhook_url
+}
 
 

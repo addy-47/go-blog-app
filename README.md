@@ -1,18 +1,21 @@
 # Go Microservices Blog Application on GKE
 
-This project is a complete CI/CD pipeline for a microservices-based blog application written in Go. It is designed to be built and deployed automatically to a Google Kubernetes Engine (GKE) cluster using GitHub Actions.
+This project is a complete CI/CD pipeline for a microservices-based blog application written in Go. It is designed to be provisioned and deployed automatically to a Google Kubernetes Engine (GKE) cluster using Terraform and Google Cloud Build.
 
 ## Table of Contents
 
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
-- [Configuration](#configuration)
+- [Local Development](#local-development)
 - [Deployment](#deployment)
+  - [Infrastructure Provisioning with Terraform](#infrastructure-provisioning-with-terraform)
+  - [Terraform Modules](#terraform-modules)
+  - [CI/CD with Cloud Build](#cicd-with-cloud-build)
 - [Directory Structure](#directory-structure)
 
 ## Architecture
 
-The application consists of several containerized microservices that are deployed to a GKE cluster.
+The application consists of several containerized microservices that are deployed to a GKE cluster. The entire infrastructure is provisioned using Terraform, and the CI/CD pipeline is managed by Google Cloud Build.
 
 ### Services
 
@@ -26,7 +29,8 @@ The application consists of several containerized microservices that are deploye
 - **Application**: Go
 - **Containerization**: Docker
 - **Orchestration**: Google Kubernetes Engine (GKE)
-- **CI/CD**: GitHub Actions
+- **Infrastructure as Code**: Terraform
+- **CI/CD**: Google Cloud Build
 - **Artifacts**: Google Artifact Registry (GAR)
 - **Database**: Cloud SQL for PostgreSQL (or similar)
 - **Authentication**: GKE Workload Identity for secure access to Google Cloud services.
@@ -36,102 +40,91 @@ The application consists of several containerized microservices that are deploye
 Before you begin, ensure you have the following set up:
 
 1.  **Google Cloud Project**: A GCP project with billing enabled.
-2.  **Required APIs**: The following APIs must be enabled in your GCP project:
-    -   Kubernetes Engine API
-    -   Artifact Registry API
-    -   Cloud SQL Admin API
-    -   Identity and Access Management (IAM) API
-3.  **Infrastructure**: The core infrastructure should be provisioned, likely using a tool like Terraform. This includes:
-    -   A GKE cluster with Workload Identity enabled.
-    -   A Google Artifact Registry (GAR) repository.
-    -   A Cloud SQL instance.
-    -   The necessary IAM Service Accounts (`app-workload-sa`, `database-sa`).
-4.  **Local Tools**:
+2.  **Local Tools**:
     -   `gcloud` CLI
     -   `kubectl`
     -   `docker`
+    -   `terraform`
 
-## Configuration
+## Local Development
 
-To get the pipeline running, you need to configure your GitHub repository and Kubernetes manifests.
+To run the application stack locally for development, you can use the provided Docker Compose configuration.
 
-### 1. GitHub Repository Secrets
+1.  **Build and Run:**
+    ```bash
+    docker-compose up --build
+    ```
 
-Navigate to your repository's **Settings > Secrets and variables > Actions** and add the following secrets:
-
--   `GCP_PROJECT_ID`: Your Google Cloud Project ID.
--   `GCP_WORKLOAD_IDENTITY_PROVIDER`: The full identifier of your Workload Identity Provider.
--   `GCP_SA_EMAIL`: The email address of the Google Service Account that GitHub Actions will use to authenticate.
-
-### 2. Kubernetes Manifests
-
-You will need to update some of the Kubernetes configuration files in the `k8s/` directory with values specific to your environment.
-
-#### Database Configuration (`k8s/db-config.yaml`)
-
-Update the `data` section with your Cloud SQL instance details:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: db-config
-  namespace: ci-cd
-data:
-  DB_HOST: "YOUR_CLOUDSQL_PRIVATE_IP"
-  DB_PORT: "5432"
-  DB_NAME: "YOUR_DB_NAME"
-  DB_USER: "YOUR_DB_USER"
-```
-
-#### Database Secret (`k8s/db-secret.yaml`)
-
-The database password must be created as a secret in the cluster. For security, it's recommended to create this manually or have the pipeline manage it using a GitHub secret, rather than committing the password to the repository.
-
-To create it manually, run:
-
-```bash
-kubectl create secret generic db-secret \
-  --namespace=ci-cd \
-  --from-literal=DB_PASSWORD='YOUR_SUPER_SECRET_PASSWORD'
-```
+This will build the Docker images for the `frontend`, `backend`, and `worker` services and start them along with a PostgreSQL database.
 
 ## Deployment
 
-The deployment process is fully automated via the GitHub Actions workflow defined in `.github/workflows/ci-cd.yaml`.
+The deployment process is managed by Terraform and Google Cloud Build.
 
-A deployment is triggered automatically on every `push` to the `ci-cd` branch.
+### Infrastructure Provisioning with Terraform
+
+The Terraform configuration in the `terraform/` directory provisions all the necessary cloud infrastructure.
+
+To provision the infrastructure, navigate to the `terraform/` directory and run:
+
+```bash
+terraform init
+terraform apply
+```
+
+You will be prompted to provide values for the variables defined in `variables.tf`, such as your GCP project ID and desired region.
+
+### Terraform Modules
+
+The infrastructure is organized into reusable Terraform modules for clarity and maintainability:
+
+-   **`gcp_project_setup`**: Enables the necessary Google Cloud APIs required for the project, such as Compute Engine, Artifact Registry, Cloud Build, and Secret Manager.
+-   **`service_accounts`**: Creates a dedicated IAM Service Account for Cloud Build. It grants this service account the specific roles it needs to build images, push to Artifact Registry, and deploy to GKE.
+-   **`artifact_registry`**: Provisions a Google Artifact Registry repository. This repository is configured to store the Docker images for each microservice.
+-   **`ssh_key`**: Generates an ED25519 SSH key pair. The public key is used to grant access to the GCE virtual machine, while the private key is securely stored in Google Secret Manager.
+-   **`secret_manager`**: A general-purpose module for creating and managing secrets in Google Secret Manager. It's used by the `ssh_key` module to store the private key and grant the Cloud Build service account access to it.
+-   **`compute_engine`**: Creates a Google Compute Engine virtual machine. A startup script on the VM installs Docker, clones the application repository using the SSH key, and prepares the environment.
+-   **`firewall`**: Sets up firewall rules in your VPC to allow HTTP (port 80) and SSH (port 22) traffic to the Compute Engine instance, making it accessible for serving content and for maintenance.
+
+### CI/CD with Cloud Build
+
+The `cloudbuild.yaml` file defines the CI/CD pipeline that automates the build and deployment process. A build can be triggered manually from the command line:
+
+```bash
+gcloud builds submit --config cloudbuild.yaml .
+```
 
 The pipeline performs the following steps:
 
-1.  **Authenticate to GCP**: Securely authenticates to Google Cloud using Workload Identity Federation.
-2.  **Identify Changes**: The `identify-services.sh` script checks which service directories have changed since the last commit and which services are not yet deployed to the cluster.
-3.  **Build and Push**: For each changed or missing service, the `build-and-push.sh` script builds a new Docker image, tags it with the commit SHA, and pushes it to your Google Artifact Registry repository.
-4.  **Deploy to GKE**: The `deploy-to-gke.sh` script applies the Kubernetes manifests for each service. It dynamically updates the image tag in the `Deployment` or `DaemonSet` manifest and waits for the rollout to complete successfully.
+1.  **Build and Push**: For each service (`backend`, `frontend`, `worker`, `logging-agent`), Cloud Build builds a new Docker image, tags it with the current commit SHA, and pushes it to the Google Artifact Registry repository created by Terraform.
+2.  **Deploy to GKE**: The `gke-deploy` step applies the Kubernetes manifests for each service to the GKE cluster, rolling out the new versions of the applications.
 
 ## Directory Structure
 
-The project is organized to separate service code, Kubernetes configuration, and CI/CD logic.
+The project is organized to separate service code, infrastructure configuration, and CI/CD logic.
 
 ```
 go-blog-app/
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yaml        # Main GitHub Actions workflow
 ├── backend/                  # Source code for the backend service
 │   └── Dockerfile
 ├── frontend/                 # Source code for the frontend service
 │   └── Dockerfile
-├── k8s/                      # All Kubernetes manifests
-│   ├── backend/              # Manifests for the backend service
-│   ├── frontend/             # Manifests for the frontend service
-│   ├── ...
-│   ├── db-config.yaml        # Shared database configuration
-│   ├── db-secret.yaml        # Secret for the database password
-│   └── rbac.yaml             # Shared RBAC roles and bindings
-├── scripts/                  # CI/CD helper scripts
-│   ├── build-and-push.sh
-│   ├── deploy-to-gke.sh
-│   └── identify-services.sh
+├── worker/                   # Source-code for the worker service
+│   └── Dockerfile
+├── logging-agent/            # Source code for the logging-agent service
+│   └── Dockerfile
+├── terraform/                # Terraform configuration for infrastructure
+│   ├── main.tf
+│   ├── variables.tf
+│   └── modules/              # Reusable Terraform modules
+│       ├── artifact_registry/
+│       ├── compute_engine/
+│       ├── firewall/
+│       ├── gcp_project_setup/
+│       ├── secret_manager/
+│       ├── service_accounts/
+│       └── ssh_key/
+├── cloudbuild.yaml           # Google Cloud Build configuration
+├── docker-compose.yaml       # Docker Compose for local development
 └── README.md                 # This file
 ```
