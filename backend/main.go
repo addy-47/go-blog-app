@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/rs/cors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,15 +26,18 @@ var (
 
 func main() {
 	var err error
-	// Initialize Kubernetes client
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatalf("Error creating in-cluster config: %v", err)
-	}
 
-	dynamicClient, err = dynamic.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Error creating dynamic client: %v", err)
+	// Initialize Kubernetes client only if running in Kubernetes
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			log.Printf("Warning: Error creating in-cluster config: %v", err)
+		} else {
+			dynamicClient, err = dynamic.NewForConfig(config)
+			if err != nil {
+				log.Printf("Warning: Error creating dynamic client: %v", err)
+			}
+		}
 	}
 
 	// Initialize PostgreSQL connection
@@ -62,12 +66,16 @@ func main() {
 	}
 
 	// HTTP routes
-	http.HandleFunc("/posts", postsHandler)        // PostgreSQL posts
-	http.HandleFunc("/crd-posts", crdPostsHandler) // CRD posts
-	http.HandleFunc("/healthz", healthCheckHandler(db))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/posts", postsHandler)        // PostgreSQL posts
+	mux.HandleFunc("/crd-posts", crdPostsHandler) // CRD posts
+	mux.HandleFunc("/healthz", healthCheckHandler(db))
 
-	log.Println("Starting backend API on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// CORS middleware
+	handler := cors.Default().Handler(mux)
+
+	log.Println("Starting backend API on :8081")
+	log.Fatal(http.ListenAndServe(":8081", handler))
 }
 
 // postsHandler handles PostgreSQL posts
@@ -109,6 +117,11 @@ func postsHandler(w http.ResponseWriter, r *http.Request) {
 
 // crdPostsHandler handles BlogPost CRD
 func crdPostsHandler(w http.ResponseWriter, r *http.Request) {
+	if dynamicClient == nil {
+		http.Error(w, "Kubernetes client not available in local development", http.StatusNotImplemented)
+		return
+	}
+
 	gvr := schema.GroupVersionResource{
 		Group:    "demo.example.com",
 		Version:  "v1",

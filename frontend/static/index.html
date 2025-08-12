@@ -1,28 +1,84 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Blog</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
 </head>
 <body>
-    <h1>Blog Posts</h1>
-    <div id="posts"></div>
+    <main class="container">
+        <h1>Blog Posts</h1>
+        <div id="posts"></div>
+        <hr>
+        <h2>New Post</h2>
+        <form id="new-post-form">
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" placeholder="Post title" required>
+            <label for="content">Content</label>
+            <textarea id="content" name="content" placeholder="Post content" required></textarea>
+            <button type="submit">Submit</button>
+        </form>
+    </main>
     <script>
-        // Fetch the API URL from the /config endpoint
-        fetch('/config')
-            .then(response => response.json())
-            .then(config => {
-                // Fetch posts from the backend API
-                fetch(config.apiUrl + '/posts')
+        document.addEventListener('DOMContentLoaded', function() {
+            const postsDiv = document.getElementById('posts');
+            const newPostForm = document.getElementById('new-post-form');
+            let apiUrl;
+
+            // Fetch the API URL from the /config endpoint
+            fetch('/config')
+                .then(response => response.json())
+                .then(config => {
+                    apiUrl = config.apiUrl;
+                    // Fetch and display posts
+                    fetchAndDisplayPosts();
+                });
+
+            // Function to fetch and display posts
+            function fetchAndDisplayPosts() {
+                fetch(apiUrl + '/posts')
                     .then(response => response.json())
                     .then(posts => {
-                        const postsDiv = document.getElementById('posts');
-                        posts.forEach(post => {
-                            const postElem = document.createElement('div');
-                            postElem.innerHTML = `<h2>${post.title}</h2><p>${post.content}</p>`;
-                            postsDiv.appendChild(postElem);
-                        });
+                        postsDiv.innerHTML = ''; // Clear existing posts
+                        if (posts) {
+                            posts.forEach(post => {
+                                const postElem = document.createElement('article');
+                                postElem.innerHTML = `
+                                    <header>
+                                        <h2>${post.title}</h2>
+                                    </header>
+                                    <p>${post.content}</p>
+                                `;
+                                postsDiv.appendChild(postElem);
+                            });
+                        }
                     });
+            }
+
+            // Handle form submission
+            newPostForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const title = document.getElementById('title').value;
+                const content = document.getElementById('content').value;
+
+                fetch(apiUrl + '/posts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ title, content }),
+                })
+                .then(response => {
+                    if (response.status === 201) {
+                        // Clear the form
+                        newPostForm.reset();
+                        // Fetch and display posts again
+                        fetchAndDisplayPosts();
+                    }
+                });
             });
+        });
     </script>
 </body>
 </html>
