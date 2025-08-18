@@ -10,7 +10,7 @@ resource "google_secret_manager_secret_version" "ssh_private_key_version" {
 
 resource "github_repository_deploy_key" "deploy_key" {
   title      = "go-blog-app-deploy-key"
-  repository = var.github_repo
+  repository = split("/", var.github_repo)[1]
   key        = tls_private_key.deploy_key.public_key_openssh
   read_only  = false
 }

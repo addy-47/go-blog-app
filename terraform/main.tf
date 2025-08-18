@@ -18,7 +18,8 @@ provider "google" {
 }
 
 provider "github" {
-  token = var.github_token
+  token = local.github_token
+  owner = split("/", var.github_repository)[0]
 }
 
 # -----------------------------------------------------------------------------
@@ -42,6 +43,7 @@ module "service_account" {
 module "secret_manager" {
   source     = "./modules/secret-manager"
   project_id = var.project_id
+  depends_on = [module.gcp_apis]
 }
 
 module "ssh_keys" {
@@ -66,6 +68,16 @@ module "vm" {
   secret_id             = module.secret_manager.ssh_private_key_id
   github_repo           = var.github_repository
   depends_on            = [module.ssh_keys, module.service_account]
+}
+
+module "cloudbuild" {
+  source      = "./modules/cloudbuild"
+  project_id  = var.project_id
+  region      = var.region
+  github_repo = var.github_repository
+  vm_ip       = module.vm.vm_ip
+  secret_id   = module.secret_manager.ssh_private_key_id
+  depends_on  = [module.vm, module.artifact_registry, module.ssh_keys, module.gcp_apis]
 }
 
 # 4. Create Artifact Registry repository

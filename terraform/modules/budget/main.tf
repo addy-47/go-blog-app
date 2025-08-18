@@ -1,6 +1,7 @@
 resource "google_monitoring_notification_channel" "gchat_channel" {
+  project      = var.project_id
   display_name = "Google Chat Budget Alerts"
-  type         = "webhook"
+  type         = "webhook_gchat"
   labels = {
     url = var.gchat_webhook_url
   }
@@ -22,14 +23,11 @@ resource "google_billing_budget" "project_budget" {
     }
   }
 
-  threshold_rules {
-    threshold_percent = 0.5
-  }
-  threshold_rules {
-    threshold_percent = 0.75
-  }
-  threshold_rules {
-    threshold_percent = 1.0
+  dynamic "threshold_rules" {
+    for_each = toset(var.budget_thresholds)
+    content {
+      threshold_percent = threshold_rules.value
+    }
   }
 
   all_updates_rule {
@@ -52,4 +50,10 @@ variable "budget_amount" {
 
 variable "gchat_webhook_url" {
   type = string
+}
+
+variable "budget_thresholds" {
+  description = "A list of budget threshold percentages to alert on (e.g., [0.5, 0.9, 1.0])."
+  type        = list(number)
+  default     = [0.5, 0.75, 1.0]
 }

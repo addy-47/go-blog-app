@@ -44,12 +44,6 @@ variable "github_repository" {
   type        = string
 }
 
-variable "github_token" {
-  description = "GitHub personal access token for managing SSH keys"
-  type        = string
-  sensitive   = true
-}
-
 variable "billing_account_id" {
   description = "GCP Billing Account ID (e.g., 012345-6789AB-CDEF01)"
   type        = string
