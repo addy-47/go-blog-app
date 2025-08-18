@@ -10,6 +10,11 @@ output "service_account_email" {
 
 output "compute_engine_instance_name" {
   description = "The name of the Compute Engine VM instance."
-  value       = module.compute_engine.vm_name
+  value       = module.vm.vm_name
 }
 
+output "compute_engine_instance_ip" {
+  description = "The external IP address of the Compute Engine VM instance."
+  value       = module.vm.vm_ip
+
+}

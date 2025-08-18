@@ -8,9 +8,9 @@ resource "google_project_iam_member" "cloudbuild_roles" {
   for_each = toset([
     "roles/artifactregistry.writer",
     "roles/compute.instanceAdmin.v1",
-    "roles/secretmanager.secretAccessor",
     "roles/cloudbuild.builds.builder",
     "roles/storage.objectCreator",
+    "roles/logging.logWriter",
     "roles/iam.serviceAccountUser"
   ])
   project = var.project_id

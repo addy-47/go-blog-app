@@ -33,18 +33,6 @@ variable "machine_type" {
   default     = "e2-medium"
 }
 
-# variable "secret_id" {
-#   description = "Secret ID for GitHub SSH key in Secret Manager"
-#   type        = string
-#   default     = "github-ssh-key"
-# }
-
-# variable "github_ssh_key" {
-#   description = "GitHub SSH private key for repository access"
-#   type        = string
-#   sensitive   = true
-# }
-
 variable "service_account_id" {
   description = "ID for the Cloud Build service account"
   type        = string
@@ -62,10 +50,15 @@ variable "github_token" {
   sensitive   = true
 }
 
+variable "billing_account_id" {
+  description = "GCP Billing Account ID (e.g., 012345-6789AB-CDEF01)"
+  type        = string
+}
+
 variable "budget_amount" {
   description = "Monthly budget limit in USD"
   type        = number
-  default     = 100
+  default     = 2
 }
 
 variable "gchat_webhook_url" {

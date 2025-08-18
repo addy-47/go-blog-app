@@ -13,9 +13,7 @@ resource "google_compute_instance" "vm" {
 
   network_interface {
     network = "default"
-    access_config {
-      # Assigns an external IP
-    }
+    access_config {}
   }
 
   metadata = {
@@ -34,12 +32,12 @@ resource "google_compute_instance" "vm" {
 
     # Set up SSH for GitHub
     mkdir -p /root/.ssh
-    gcloud secrets versions access latest --secret=github-ssh-key --project=${var.project_id} > /root/.ssh/id_rsa
+    gcloud secrets versions access latest --secret=${var.secret_id} --project=${var.project_id} > /root/.ssh/id_rsa
     chmod 600 /root/.ssh/id_rsa
     ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
 
     # Clone the repository as www-data
-    su - www-data -c "git clone -b cloudbuild git@github.com:addy-47/go-blog-app.git /var/www/go-blog-app"
+    su - www-data -c "git clone -b cloudbuild git@github.com:${var.github_repo}.git /var/www/go-blog-app"
     EOF
 
   service_account {
@@ -85,4 +83,18 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "secret_id" {
+  description = "The ID of the Secret Manager secret for the SSH private key."
+  type        = string
+}
+
+variable "github_repo" {
+  description = "The GitHub repository in 'owner/repo' format."
+  type        = string
+}
+
 output "vm_name" { value = google_compute_instance.vm.name }
+
+output "vm_ip" {
+  value = google_compute_instance.vm.network_interface[0].access_config[0].nat_ip
+}

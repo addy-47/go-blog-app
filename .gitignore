@@ -6,3 +6,4 @@ terraform.tfstate*
 complex-ci-cd.yaml
 smart-ci-cd.yaml
 logs
+github_token.txt
