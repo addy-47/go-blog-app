@@ -25,7 +25,7 @@ steps:
         fi
         
         # Test SSH connection to VM
-        gcloud compute ssh --zone ${_ZONE} cloudbuild@${_VM_IP} --command "echo 'SSH connection successful'"
+        gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "echo 'SSH connection successful'"
 
   # Step 2: Detect missing and changed services
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -37,7 +37,7 @@ steps:
         
         # A. Find services MISSING on the VM
         echo "Checking running services on VM..."
-        running_images=$(gcloud compute ssh --zone ${_ZONE} cloudbuild@${_VM_IP} --command "docker ps --format '{{.Image}}'" || echo "")
+        running_images=$(gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "docker ps --format '{{.Image}}'" || echo "")
         missing_services=""
         for service in ${_ALL_SERVICES}; do
           if ! echo "$running_images" | grep -q "/$service:"; then
@@ -99,17 +99,18 @@ steps:
         done
         
         # Ensure deployment directory exists on VM
-        gcloud compute ssh --zone ${_ZONE} cloudbuild@${_VM_IP} --command "mkdir -p /var/www/go-blog-app"
+        gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "mkdir -p /var/www/go-blog-app"
         
         # Copy docker-compose file to VM
-        gcloud compute scp --zone ${_ZONE} docker-compose.yml cloudbuild@${_VM_IP}:/var/www/go-blog-app/
+        gcloud compute scp --zone ${_ZONE} docker-compose.yml ${_VM_NAME}:/var/www/go-blog-app/
         
         # Deploy on VM
-        gcloud compute ssh --zone ${_ZONE} cloudbuild@${_VM_IP} --command "cd /var/www/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans"
+        gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "cd /var/www/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans"
 
 substitutions:
   _PROJECT_ID: 'go-blog-app-1'
-  _VM_IP: "34.10.115.165"
+  _VM_NAME: "blog-vm"  # The name of your VM instance
+  _VM_IP: "34.10.115.165" # Keep for ssh-keyscan
   _ZONE: "us-central1-a"
   _SECRET_ID: "go-blog-app-ssh-private-key"
   _GAR_REGION: "us-central1"
