@@ -9,21 +9,37 @@ steps:
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan github.com >> /root/.ssh/known_hosts
 
-  # Step 2: Detect changed services (using git diff)
-  - name: 'gcr.io/cloud-builders/git'
+  # Step 2: Detect missing and changed services
+  - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        git fetch origin
-        CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-        SERVICES=""
-        for service in backend frontend worker logging-agent; do
-          if echo "$CHANGED_FILES" | grep -q "^$service/"; then
-            SERVICES="$SERVICES $service"
+        set -e
+        ALL_SERVICES="backend frontend worker logging-agent"
+        
+        # A. Find services MISSING on the VM.
+        # We use gcloud to run 'docker ps' on the remote VM. The awk script extracts the service name from the image tag.
+        # The '|| true' prevents the build from failing if the SSH command fails (e.g., on first run when VM is starting).
+        RUNNING_IMAGES=$(gcloud compute ssh --zone us-central1-a cloudbuild@${_VM_IP} --command "docker ps --format '{{.Image}}'" || true)
+        MISSING_SERVICES=""
+        for service in $ALL_SERVICES; do
+          if ! echo "$RUNNING_IMAGES" | grep -q "/$service:"; then
+            MISSING_SERVICES="$MISSING_SERVICES $service"
           fi
         done
-        echo "Changed services: $SERVICES" > /workspace/changed_services.txt
+        echo "Missing services on VM: $MISSING_SERVICES"
+        
+        # B. Find services that CHANGED in the git commit.
+        git fetch origin main
+        CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+        CHANGED_SERVICES=$(for service in $ALL_SERVICES; do if echo "$CHANGED_FILES" | grep -q "^$service/"; then echo "$service"; fi; done)
+        echo "Changed services in commit: $CHANGED_SERVICES"
+        
+        # C. Combine, sort, and unique the lists. This is the final list of services to build.
+        SERVICES_TO_BUILD=$(echo "$MISSING_SERVICES $CHANGED_SERVICES" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        echo "Final list of services to build: $SERVICES_TO_BUILD"
+        echo "$SERVICES_TO_BUILD" > /workspace/services_to_build.txt
 
   # Step 3: Build and push Docker images for changed services
   - name: 'gcr.io/cloud-builders/docker'
@@ -32,13 +48,16 @@ steps:
       - '-c'
       - |
         set -e
-        export DOCKER_BUILDKIT=1
-        while read -r service; do
-          if [ -n "$service" ]; then
-            docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
-            docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
-          fi
-        done < /workspace/changed_services.txt
+        SERVICES=$(cat /workspace/services_to_build.txt)
+        if [ -z "$SERVICES" ]; then
+          echo "No services to build. Skipping."
+          exit 0
+        fi
+        for service in $SERVICES; do
+          echo "Building and pushing $service..."
+          docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
+          docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
+        done
 
   # Step 4: Update docker-compose.yml with new image tags
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -47,11 +66,10 @@ steps:
       - '-c'
       - |
         set -e
-        while read -r service; do
-          if [ -n "$service" ]; then
-            sed -i "s|${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:.*|${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}|g" docker-compose.yml
-          fi
-        done < /workspace/changed_services.txt
+        # For each service that was built, update its image tag in docker-compose.yml
+        for service in $(cat /workspace/services_to_build.txt); do
+          sed -i "s|/${service}:latest|/${service}:${COMMIT_SHA}|g" docker-compose.yml
+        done
 
   # Step 5: Copy the updated docker-compose file to the VM
   - name: 'gcr.io/cloud-builders/gcloud'

@@ -14,43 +14,29 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    build: ./backend
+    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/backend:latest
     container_name: backend
     ports:
       - "8081:8081"
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=user
-      - DB_PASSWORD=password
-      - DB_NAME=blog
     depends_on:
       - postgres
 
   frontend:
-    build: ./frontend
+    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/frontend:latest
     container_name: frontend
     ports:
       - "8080:8080"
-    environment:
-      - API_URL=http://localhost:8081
     depends_on:
       - backend
 
   worker:
-    build: ./worker
+    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/worker:latest
     container_name: worker
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=user
-      - DB_PASSWORD=password
-      - DB_NAME=blog
     depends_on:
       - postgres
 
   logging-agent:
-    build: ./logging-agent
+    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/logging-agent:latest
     container_name: logging-agent
 
 volumes:
