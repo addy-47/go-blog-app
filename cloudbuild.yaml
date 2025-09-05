@@ -20,25 +20,25 @@ steps:
         # A. Find services MISSING on the VM.
         # We use gcloud to run 'docker ps' on the remote VM. The awk script extracts the service name from the image tag.
         # The '|| true' prevents the build from failing if the SSH command fails (e.g., on first run when VM is starting).
-        RUNNING_IMAGES=$(gcloud compute ssh --zone us-central1-a cloudbuild@${_VM_IP} --command "docker ps --format '{{.Image}}'" || true)
-        MISSING_SERVICES=""
+        running_images=$(gcloud compute ssh --zone us-central1-a cloudbuild@${_VM_IP} --command "docker ps --format '{{.Image}}'" || true)
+        missing_services=""
         for service in ${_ALL_SERVICES}; do
-          if ! echo "$RUNNING_IMAGES" | grep -q "/$service:"; then
-            MISSING_SERVICES="$MISSING_SERVICES $service"
+          if ! echo "$running_images" | grep -q "/$service:"; then
+            missing_services="$missing_services $service"
           fi
         done
-        echo "Missing services on VM: $MISSING_SERVICES"
+        echo "Missing services on VM: $missing_services"
         
         # B. Find services that CHANGED in the git commit.
         git fetch origin main
-        CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-        CHANGED_SERVICES=$(for service in ${_ALL_SERVICES}; do if echo "$CHANGED_FILES" | grep -q "^$service/"; then echo "$service"; fi; done)
-        echo "Changed services in commit: $CHANGED_SERVICES"
+        changed_files=$(git diff --name-only HEAD^ HEAD)
+        changed_services=$(for service in ${_ALL_SERVICES}; do if echo "$changed_files" | grep -q "^$service/"; then echo "$service"; fi; done)
+        echo "Changed services in commit: $changed_services"
         
         # C. Combine, sort, and unique the lists. This is the final list of services to build.
-        SERVICES_TO_BUILD=$(echo "$MISSING_SERVICES $CHANGED_SERVICES" | tr ' ' '\n' | sort -u | tr '\n' ' ')
-        echo "Final list of services to build: $SERVICES_TO_BUILD"
-        echo "$SERVICES_TO_BUILD" > /workspace/services_to_build.txt
+        services_to_build=$(echo "$missing_services $changed_services" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        echo "Final list of services to build: $services_to_build"
+        echo "$services_to_build" > /workspace/services_to_build.txt
 
   # Step 3: Build and push Docker images for changed services
   - name: 'gcr.io/cloud-builders/docker'
@@ -47,12 +47,12 @@ steps:
       - '-c'
       - |
         set -e
-        SERVICES=$(cat /workspace/services_to_build.txt)
-        if [ -z "$SERVICES" ]; then
+        services=$(cat /workspace/services_to_build.txt)
+        if [ -z "$services" ]; then
           echo "No services to build. Skipping."
           exit 0
         fi
-        for service in $SERVICES; do
+        for service in $services; do
           echo "Building and pushing $service..."
           docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
           docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
