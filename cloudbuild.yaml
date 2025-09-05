@@ -71,9 +71,9 @@ steps:
 
 substitutions:
   _PROJECT_ID: 'go-blog-app-1'
-  _VM_IP: ${_VM_IP}
-  _SECRET_ID: ${_SECRET_ID}
-  _GAR_REGION: ${_GAR_REGION}
-  _GAR_REPO_NAME: ${_GAR_REPO_NAME}
+  _VM_IP: "34.10.115.165"
+  _SECRET_ID: "go-blog-app-ssh-private-key"
+  _GAR_REGION: "us-central1"
+  _GAR_REPO_NAME: "blog-app"
 options:
   logging: CLOUD_LOGGING_ONLY
