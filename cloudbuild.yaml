@@ -16,14 +16,13 @@ steps:
       - '-c'
       - |
         set -e
-        ALL_SERVICES="backend frontend worker logging-agent"
         
         # A. Find services MISSING on the VM.
         # We use gcloud to run 'docker ps' on the remote VM. The awk script extracts the service name from the image tag.
         # The '|| true' prevents the build from failing if the SSH command fails (e.g., on first run when VM is starting).
         RUNNING_IMAGES=$(gcloud compute ssh --zone us-central1-a cloudbuild@${_VM_IP} --command "docker ps --format '{{.Image}}'" || true)
         MISSING_SERVICES=""
-        for service in $ALL_SERVICES; do
+        for service in ${_ALL_SERVICES}; do
           if ! echo "$RUNNING_IMAGES" | grep -q "/$service:"; then
             MISSING_SERVICES="$MISSING_SERVICES $service"
           fi
@@ -33,7 +32,7 @@ steps:
         # B. Find services that CHANGED in the git commit.
         git fetch origin main
         CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
-        CHANGED_SERVICES=$(for service in $ALL_SERVICES; do if echo "$CHANGED_FILES" | grep -q "^$service/"; then echo "$service"; fi; done)
+        CHANGED_SERVICES=$(for service in ${_ALL_SERVICES}; do if echo "$CHANGED_FILES" | grep -q "^$service/"; then echo "$service"; fi; done)
         echo "Changed services in commit: $CHANGED_SERVICES"
         
         # C. Combine, sort, and unique the lists. This is the final list of services to build.
@@ -93,5 +92,6 @@ substitutions:
   _SECRET_ID: "go-blog-app-ssh-private-key"
   _GAR_REGION: "us-central1"
   _GAR_REPO_NAME: "blog-app"
+  _ALL_SERVICES: "backend frontend worker logging-agent"
 options:
   logging: CLOUD_LOGGING_ONLY
