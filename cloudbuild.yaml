@@ -5,7 +5,7 @@ steps:
     args:
       - '-c'
       - |
-        gcloud secrets versions access latest --secret=go-blog-app-ssh-private-key > /root/.ssh/id_rsa
+        gcloud secrets versions access latest --secret=${_SECRET_ID} > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan github.com >> /root/.ssh/known_hosts
 
@@ -18,7 +18,7 @@ steps:
         git fetch origin
         CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
         SERVICES=""
-        for service in backend database; do
+        for service in backend frontend worker logging-agent; do
           if echo "$CHANGED_FILES" | grep -q "^$service/"; then
             SERVICES="$SERVICES $service"
           fi
@@ -35,8 +35,8 @@ steps:
         export DOCKER_BUILDKIT=1
         while read -r service; do
           if [ -n "$service" ]; then
-            docker build -t us-central1-docker.pkg.dev/${PROJECT_ID}/go-blog-app/$service:${COMMIT_SHA} ./$service
-            docker push us-central1-docker.pkg.dev/${PROJECT_ID}/go-blog-app/$service:${COMMIT_SHA}
+            docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
+            docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
           fi
         done < /workspace/changed_services.txt
 
@@ -49,28 +49,31 @@ steps:
         set -e
         while read -r service; do
           if [ -n "$service" ]; then
-            sed -i "s|us-central1-docker.pkg.dev/${PROJECT_ID}/go-blog-app/$service:.*|us-central1-docker.pkg.dev/${PROJECT_ID}/go-blog-app/$service:${COMMIT_SHA}|g" docker-compose.yml
+            sed -i "s|${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:.*|${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}|g" docker-compose.yml
           fi
         done < /workspace/changed_services.txt
-        git config --global user.email "cloudbuild@google.com"
-        git config --global user.name "Cloud Build"
-        git add docker-compose.yml
-        git commit -m "Update docker-compose.yml with new image tags [skip ci]"
-        git push origin main
 
-  # Step 5: SSH to VM, pull latest code, and run docker-compose up
+  # Step 5: Copy the updated docker-compose file to the VM
   - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'bash'
-    args:
-      - '-c'
+    args: ['compute', 'scp', '--zone', 'us-central1-a', 'docker-compose.yml', 'cloudbuild@${_VM_IP}:/var/www/go-blog-app/docker-compose.yml']
+
+  # Step 6: SSH to VM and run docker-compose to pull new images and restart services
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: 
+      - 'compute'
+      - 'ssh'
+      - '--zone'
+      - 'us-central1-a'
+      - 'cloudbuild@${_VM_IP}'
+      - '--'
       - |
-        ssh -o StrictHostKeyChecking=no -i /root/.ssh/id_rsa deploy-user@${_VM_IP} << 'EOF'
-          cd /app
-          git pull origin main
-          docker-compose down
-          docker-compose up -d
-        EOF
+        cd /var/www/go-blog-app && docker-compose up -d --pull --remove-orphans
+
 substitutions:
-  _VM_IP: ${module.vm.vm_ip}
+  _PROJECT_ID: 'go-blog-app-1'
+  _VM_IP: ${_VM_IP}
+  _SECRET_ID: ${_SECRET_ID}
+  _GAR_REGION: ${_GAR_REGION}
+  _GAR_REPO_NAME: ${_GAR_REPO_NAME}
 options:
   logging: CLOUD_LOGGING_ONLY

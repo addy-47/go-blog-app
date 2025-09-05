@@ -1,9 +1,8 @@
 resource "google_monitoring_notification_channel" "gchat_channel" {
-  project      = var.project_id
   display_name = "Google Chat Budget Alerts"
-  type         = "webhook_gchat"
-  labels = {
-    url = var.gchat_webhook_url
+  type         = "google_chat"
+   labels = {
+    space = var.gchat_space_id
   }
 }
 
@@ -23,16 +22,19 @@ resource "google_billing_budget" "project_budget" {
     }
   }
 
-  dynamic "threshold_rules" {
-    for_each = toset(var.budget_thresholds)
-    content {
-      threshold_percent = threshold_rules.value
-    }
+  threshold_rules {
+    threshold_percent = 0.5
+  }
+  threshold_rules {
+    threshold_percent = 0.75
+  }
+  threshold_rules {
+    threshold_percent = 1.0
   }
 
   all_updates_rule {
     monitoring_notification_channels = [google_monitoring_notification_channel.gchat_channel.id]
-    disable_default_iam_recipients   = true
+    disable_default_iam_recipients = true
   }
 }
 
@@ -48,12 +50,7 @@ variable "budget_amount" {
   type = number
 }
 
-variable "gchat_webhook_url" {
-  type = string
-}
-
-variable "budget_thresholds" {
-  description = "A list of budget threshold percentages to alert on (e.g., [0.5, 0.9, 1.0])."
-  type        = list(number)
-  default     = [0.5, 0.75, 1.0]
+variable "gchat_space_id" {
+  description = "Google Chat space ID (e.g., spaces/AAQALXamGZk)"
+  type        = string
 }

@@ -55,8 +55,7 @@ variable "budget_amount" {
   default     = 2
 }
 
-variable "gchat_webhook_url" {
-  description = "Google Chat webhook URL for budget alerts"
+variable "gchat_space_id" {
+  description = "Google Chat space ID (e.g., spaces/AAQALXamGZk)"
   type        = string
-  sensitive   = true
 }

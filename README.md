@@ -128,3 +128,20 @@ go-blog-app/
 ├── docker-compose.yaml       # Docker Compose for local development
 └── README.md                 # This file
 ```
+
+
+╷
+│ Error: Error creating NotificationChannel: googleapi: Error 400: Field "notification_channel.labels['webhook_uri']" is not allowed; labels must conform to the channel type's descriptor; permissible label keys for "google_chat" are: {"space"}.
+│ 
+│   with module.budget.google_monitoring_notification_channel.gchat_channel,
+│   on modules/budget/main.tf line 1, in resource "google_monitoring_notification_channel" "gchat_channel":
+│    1: resource "google_monitoring_notification_channel" "gchat_channel" {
+│ 
+╵
+╷
+│ Error: Error creating Trigger: googleapi: Error 400: Request contains an invalid argument.
+│ 
+│   with module.cloudbuild.google_cloudbuild_trigger.github_trigger,
+│   on modules/cloudbuild/main.tf line 1, in resource "google_cloudbuild_trigger" "github_trigger":
+│    1: resource "google_cloudbuild_trigger" "github_trigger" {
+│ 

@@ -22,22 +22,31 @@ resource "google_compute_instance" "vm" {
 
   metadata_startup_script = <<-EOF
     #!/bin/bash
+    set -e -x
+
+    # Install dependencies
     apt-get update
-    apt-get install -y docker.io docker-compose git nginx
+    apt-get install -y -qq docker.io docker-compose git nginx
+
+    # Start and enable services
     systemctl enable docker
     systemctl start docker
-    mkdir -p /var/www/go-blog-app
-    chown -R www-data:www-data /var/www/go-blog-app
+
+    # Configure gcloud docker credential helper for the VM's service account
     gcloud auth configure-docker ${var.region}-docker.pkg.dev
 
-    # Set up SSH for GitHub
+    # Set up SSH key for the root user to clone the private GitHub repo
     mkdir -p /root/.ssh
     gcloud secrets versions access latest --secret=${var.secret_id} --project=${var.project_id} > /root/.ssh/id_rsa
     chmod 600 /root/.ssh/id_rsa
     ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> /root/.ssh/known_hosts
 
-    # Clone the repository as www-data
-    su - www-data -c "git clone -b cloudbuild git@github.com:${var.github_repo}.git /var/www/go-blog-app"
+    # Idempotently clone the repository and set ownership
+    if [ ! -d "/var/www/go-blog-app/.git" ]; then
+      git clone -b cloudbuild git@github.com:${var.github_repo}.git /var/www/go-blog-app
+      chown -R www-data:www-data /var/www/go-blog-app
+    fi
+    git config --global --add safe.directory /var/www/go-blog-app
     EOF
 
   service_account {

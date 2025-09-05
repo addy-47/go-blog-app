@@ -70,15 +70,7 @@ module "vm" {
   depends_on            = [module.ssh_keys, module.service_account]
 }
 
-module "cloudbuild" {
-  source      = "./modules/cloudbuild"
-  project_id  = var.project_id
-  region      = var.region
-  github_repo = var.github_repository
-  vm_ip       = module.vm.vm_ip
-  secret_id   = module.secret_manager.ssh_private_key_id
-  depends_on  = [module.vm, module.artifact_registry, module.ssh_keys, module.gcp_apis]
-}
+
 
 # 4. Create Artifact Registry repository
 module "artifact_registry" {
@@ -89,11 +81,11 @@ module "artifact_registry" {
   depends_on     = [module.gcp_apis]
 }
 
-module "budget" {
-  source             = "./modules/budget"
-  project_id         = var.project_id
-  billing_account_id = var.billing_account_id
-  budget_amount      = var.budget_amount
-  gchat_webhook_url  = var.gchat_webhook_url
-  depends_on         = [module.gcp_apis]
-}
+# module "budget" {
+#   source             = "./modules/budget"
+#   project_id         = var.project_id
+#   billing_account_id = var.billing_account_id
+#   budget_amount      = var.budget_amount
+#   gchat_space_id     = var.gchat_space_id
+#   depends_on         = [module.gcp_apis]
+# }
