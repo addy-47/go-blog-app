@@ -69,6 +69,9 @@ steps:
       - '-c'
       - |
         set -e
+        # Install gettext (for envsubst)
+        apt-get update && apt-get install -y gettext
+
         services=$(cat /workspace/services_to_build.txt)
         if [ -z "$services" ]; then
           echo "No services to update. Skipping."
