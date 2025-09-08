@@ -16,6 +16,10 @@ resource "google_compute_instance" "vm" {
     access_config {}
   }
 
+  metadata = {
+    enable-oslogin = "TRUE"
+  }
+
   metadata_startup_script = <<-EOF
     #!/bin/bash
     set -e -x
