@@ -7,6 +7,8 @@ steps:
       - '-c'
       - |
         set -e
+        # Add a delay to allow the VM to initialize
+        sleep 30
         # A. Find services MISSING on the VM
         echo "Checking running services on VM..."
         running_images=$(gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "docker ps --format '{{.Image}}'" || echo "")
@@ -21,7 +23,7 @@ steps:
         echo "Checking changed services..."
         # Fetch the branch used by the trigger
         git fetch origin $BRANCH_NAME
-        changed_files=$(git diff --name-only HEAD^ HEAD)
+        changed_files=$(git diff --name-only HEAD^ HEAD || git ls-tree -r HEAD --name-only)
         changed_services=""
         for service in ${_ALL_SERVICES}; do
           if echo "$changed_files" | grep -q "^$service/"; then
