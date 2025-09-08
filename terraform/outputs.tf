@@ -18,8 +18,3 @@ output "compute_engine_instance_ip" {
   value       = module.vm.vm_ip
 
 }
-
-output "ssh_private_key_secret_id" {
-  description = "The ID of the Secret Manager secret for the SSH private key."
-  value       = module.secret_manager.ssh_private_key_id
-}

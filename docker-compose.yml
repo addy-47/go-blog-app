@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/backend:latest
+    image: ${GAR_REGISTRY}/backend:${TAG_NAME}
     container_name: backend
     ports:
       - "8081:8081"
@@ -22,7 +22,7 @@ services:
       - postgres
 
   frontend:
-    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/frontend:latest
+    image: ${GAR_REGISTRY}/frontend:${TAG_NAME}
     container_name: frontend
     ports:
       - "8080:8080"
@@ -30,13 +30,13 @@ services:
       - backend
 
   worker:
-    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/worker:latest
+    image: ${GAR_REGISTRY}/worker:${TAG_NAME}
     container_name: worker
     depends_on:
       - postgres
 
   logging-agent:
-    image: us-central1-docker.pkg.dev/go-blog-app-1/blog-app/logging-agent:latest
+    image: ${GAR_REGISTRY}/logging-agent:${TAG_NAME}
     container_name: logging-agent
 
 volumes:

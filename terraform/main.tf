@@ -40,21 +40,6 @@ module "service_account" {
   depends_on         = [module.gcp_apis]
 }
 
-module "secret_manager" {
-  source     = "./modules/secret-manager"
-  project_id = var.project_id
-  depends_on = [module.gcp_apis]
-}
-
-module "ssh_keys" {
-  source          = "./modules/ssh-keys"
-  project_id      = var.project_id
-  github_repo     = var.github_repository
-  secret_id       = module.secret_manager.ssh_private_key_id
-  service_account = module.service_account.service_account_email
-  depends_on      = [module.secret_manager, module.service_account]
-}
-
 # Creating Compute Engine VM
 module "vm" {
   source                = "./modules/vm"
@@ -63,14 +48,9 @@ module "vm" {
   zone                  = var.zone
   vm_name               = var.vm_name
   machine_type          = var.machine_type
-  ssh_public_key        = module.ssh_keys.ssh_public_key
   service_account_email = module.service_account.service_account_email
-  secret_id             = module.secret_manager.ssh_private_key_id
-  github_repo           = var.github_repository
-  depends_on            = [module.ssh_keys, module.service_account]
+  depends_on            = [module.service_account]
 }
-
-
 
 # 4. Create Artifact Registry repository
 module "artifact_registry" {

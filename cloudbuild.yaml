@@ -1,40 +1,12 @@
 steps:
-  # Step 1: Setup SSH and authentication
+  # Step 1: Detect missing and changed services
   - name: 'gcr.io/cloud-builders/gcloud'
+    id: detect-changes
     entrypoint: 'bash'
     args:
       - '-c'
       - |
         set -e
-        # Setup SSH directories and permissions
-        mkdir -p /root/.ssh /builder/home/.ssh
-        chmod 700 /root/.ssh /builder/home/.ssh
-        
-        # Get SSH key from Secret Manager and set permissions
-        gcloud secrets versions access latest --secret=${_SECRET_ID} > /root/.ssh/id_rsa
-        cp /root/.ssh/id_rsa /builder/home/.ssh/id_rsa
-        chmod 600 /root/.ssh/id_rsa /builder/home/.ssh/id_rsa
-        
-        # Setup known hosts for both SSH directories
-        ssh-keyscan -t rsa ${_VM_IP} >> /root/.ssh/known_hosts
-        ssh-keyscan -t rsa ${_VM_IP} >> /builder/home/.ssh/known_hosts
-        
-        # Generate SSH key for gcloud if needed
-        if [ ! -f /builder/home/.ssh/google_compute_engine ]; then
-          ssh-keygen -t rsa -f /builder/home/.ssh/google_compute_engine -N ""
-        fi
-        
-        # Test SSH connection to VM
-        gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "echo 'SSH connection successful'"
-
-  # Step 2: Detect missing and changed services
-  - name: 'gcr.io/cloud-builders/gcloud'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        set -e
-        
         # A. Find services MISSING on the VM
         echo "Checking running services on VM..."
         running_images=$(gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "docker ps --format '{{.Image}}'" || echo "")
@@ -45,21 +17,26 @@ steps:
           fi
         done
         echo "Missing services on VM: $missing_services"
-        
         # B. Find services that CHANGED in the git commit
         echo "Checking changed services..."
-        git fetch origin cloudbuild || (echo "Failed to fetch from origin" && exit 1)
-        changed_files=$(git diff --name-only HEAD^ HEAD || git diff --name-only HEAD)
-        changed_services=$(for service in ${_ALL_SERVICES}; do if echo "$changed_files" | grep -q "^$service/"; then echo "$service"; fi; done)
+        # Fetch the branch used by the trigger
+        git fetch origin $BRANCH_NAME
+        changed_files=$(git diff --name-only HEAD^ HEAD)
+        changed_services=""
+        for service in ${_ALL_SERVICES}; do
+          if echo "$changed_files" | grep -q "^$service/"; then
+            changed_services="$changed_services $service"
+          fi
+        done
         echo "Changed services in commit: $changed_services"
-        
         # C. Combine lists and save
         services_to_build=$(echo "$missing_services $changed_services" | tr ' ' '\n' | sort -u | tr '\n' ' ')
         echo "Final list of services to build: $services_to_build"
         echo "$services_to_build" > /workspace/services_to_build.txt
 
-  # Step 3: Build and push Docker images
+  # Step 2: Build and push Docker images
   - name: 'gcr.io/cloud-builders/docker'
+    id: build-and-push
     entrypoint: 'bash'
     args:
       - '-c'
@@ -70,18 +47,17 @@ steps:
           echo "No services to build. Skipping."
           exit 0
         fi
-        
         echo "Authenticating with Artifact Registry..."
         gcloud auth configure-docker ${_GAR_REGION}-docker.pkg.dev
-        
         for service in $services; do
           echo "Building and pushing $service..."
           docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
           docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
         done
 
-  # Step 4: Update and deploy to VM
+  # Step 3: Update and deploy to VM
   - name: 'gcr.io/cloud-builders/gcloud'
+    id: deploy-to-vm
     entrypoint: 'bash'
     args:
       - '-c'
@@ -92,27 +68,22 @@ steps:
           echo "No services to update. Skipping."
           exit 0
         fi
-        
-        # Update docker-compose.yml with new image tags
-        for service in $services; do
-          sed -i "s|/${service}:.*|/${service}:${COMMIT_SHA}|g" docker-compose.yml
-        done
-        
+        # Set environment variables for substitution
+        export GAR_REGISTRY=${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}
+        export TAG_NAME=${COMMIT_SHA}
+        # Substitute variables in docker-compose.yml
+        envsubst < docker-compose.yml > docker-compose.rendered.yml
         # Ensure deployment directory exists on VM
         gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "mkdir -p /var/www/go-blog-app"
-        
         # Copy docker-compose file to VM
-        gcloud compute scp --zone ${_ZONE} docker-compose.yml ${_VM_NAME}:/var/www/go-blog-app/
-        
+        gcloud compute scp --zone ${_ZONE} docker-compose.rendered.yml ${_VM_NAME}:/var/www/go-blog-app/docker-compose.yml
         # Deploy on VM
         gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "cd /var/www/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans"
 
 substitutions:
   _PROJECT_ID: 'go-blog-app-1'
-  _VM_NAME: "blog-vm"  # The name of your VM instance
-  _VM_IP: "34.10.115.165" # Keep for ssh-keyscan
+  _VM_NAME: "blog-vm"
   _ZONE: "us-central1-a"
-  _SECRET_ID: "go-blog-app-ssh-private-key"
   _GAR_REGION: "us-central1"
   _GAR_REPO_NAME: "blog-app"
   _ALL_SERVICES: "backend frontend worker logging-agent"
