@@ -7,8 +7,6 @@ steps:
       - '-c'
       - |
         set -e
-        # Add a delay to allow the VM to initialize
-        sleep 30
         # A. Find services MISSING on the VM
         echo "Checking running services on VM..."
         running_images=$(gcloud compute ssh --zone ${_ZONE} ${_VM_NAME} --command "docker ps --format '{{.Image}}'" || echo "")
@@ -36,7 +34,15 @@ steps:
         echo "Final list of services to build: $services_to_build"
         echo "$services_to_build" > /workspace/services_to_build.txt
 
-  # Step 2: Build and push Docker images
+  # Step 2: Authenticate with Artifact Registry
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: auth-docker
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'gcloud auth configure-docker ${_GAR_REGION}-docker.pkg.dev'
+
+  # Step 3: Build and push Docker images
   - name: 'gcr.io/cloud-builders/docker'
     id: build-and-push
     entrypoint: 'bash'
@@ -49,15 +55,13 @@ steps:
           echo "No services to build. Skipping."
           exit 0
         fi
-        echo "Authenticating with Artifact Registry..."
-        gcloud auth configure-docker ${_GAR_REGION}-docker.pkg.dev
         for service in $services; do
           echo "Building and pushing $service..."
           docker build -t ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA} ./$service
           docker push ${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}/$service:${COMMIT_SHA}
         done
 
-  # Step 3: Update and deploy to VM
+  # Step 4: Update and deploy to VM
   - name: 'gcr.io/cloud-builders/gcloud'
     id: deploy-to-vm
     entrypoint: 'bash'
