@@ -24,17 +24,43 @@ resource "google_compute_instance" "vm" {
     #!/bin/bash
     set -e -x
 
-    # Install dependencies
+    # Update system
     apt-get update
-    apt-get install -y -qq docker.io docker-compose
+    apt-get upgrade -y
 
-    # Start and enable services
+    # Install dependencies
+    apt-get install -y -qq curl uidmap
+
+    # Install Docker using the official convenience script
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+
+    # Install the latest Docker Compose
+    DOCKER_COMPOSE_VERSION="v2.24.7"
+    curl -L "https://github.com/docker/compose/releases/download/$${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+
+    # Create a symlink for easy access
+    ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+    # Add the current user to docker group (this will be the service account user)
+    USER_NAME=$(whoami)
+    usermod -aG docker $USER_NAME
+
+    # Alternatively, if you want to allow any user to run docker without sudo:
+    # chmod 666 /var/run/docker.sock
+
+    # Configure Docker to start on boot
     systemctl enable docker
     systemctl start docker
 
     # Configure gcloud docker credential helper for the VM's service account
-    gcloud auth configure-docker ${var.region}-docker.pkg.dev
-    EOF
+    gcloud auth configure-docker $${var.region}-docker.pkg.dev
+
+    # Create project directory and set permissions
+    mkdir -p /home/$USER_NAME/go-blog-app
+    chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/go-blog-app
+  EOF
 
   service_account {
     email  = var.service_account_email
