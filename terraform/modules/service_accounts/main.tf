@@ -13,7 +13,8 @@ resource "google_project_iam_member" "cloudbuild_roles" {
     "roles/logging.logWriter",
     "roles/iam.serviceAccountUser",
     "roles/compute.osLogin",
-    "roles/compute.osAdminLogin"
+    "roles/compute.osAdminLogin",
+    "roles/iap.tunnelResourceAccessor"
   ])
   project = var.project_id
   role    = each.key
