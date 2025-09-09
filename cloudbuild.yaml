@@ -9,7 +9,7 @@ steps:
         set -e
         # A. Find services MISSING on the VM
         echo "Checking running services on VM..."
-        running_images=$(gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE}  --command "docker ps --format '{{.Image}}'" || echo "")
+        running_images=$(gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "docker ps --format '{{.Image}}'" --tunnel-through-iap || echo "")
         missing_services=""
         for service in ${_ALL_SERVICES}; do
           if ! echo "$running_images" | grep -q "/$service:"; then
@@ -83,11 +83,11 @@ steps:
         # Substitute variables in docker-compose.yml
         envsubst < docker-compose.yml > docker-compose.rendered.yml
         # Ensure deployment directory exists on VM
-        gcloud compute ssh  root@${_VM_NAME}  --zone ${_ZONE} --command "mkdir -p ~/go-blog-app"
+        gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "mkdir -p ~/go-blog-app" --tunnel-through-iap
         # Copy docker-compose file to VM
-        gcloud compute scp   docker-compose.rendered.yml  root@${_VM_NAME}:~/go-blog-app/docker-compose.yml --zone ${_ZONE}
+        gcloud compute scp --zone ${_ZONE} docker-compose.rendered.yml root@${_VM_NAME}:~/go-blog-app/docker-compose.yml --tunnel-through-iap
         # Deploy on VM
-        gcloud compute ssh  root@${_VM_NAME}  --zone ${_ZONE} --command "cd ~/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans"
+        gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "cd ~/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans" --tunnel-through-iap
 
 substitutions:
   _PROJECT_ID: 'go-blog-app-1'
