@@ -7,9 +7,9 @@ steps:
       - '-c'
       - |
         set -e
-        # A. Find services MISSING on the VM
+        # A. Find services MISSING on the VM (using sudo for docker)
         echo "Checking running services on VM..."
-        running_images=$(gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "docker ps --format '{{.Image}}'" --tunnel-through-iap || echo "")
+        running_images=$(gcloud compute ssh ${_VM_NAME} --zone ${_ZONE} --command "sudo docker ps --format '{{.Image}}'"   || echo "")
         missing_services=""
         for service in ${_ALL_SERVICES}; do
           if ! echo "$running_images" | grep -q "/$service:"; then
@@ -17,9 +17,9 @@ steps:
           fi
         done
         echo "Missing services on VM: $missing_services"
+
         # B. Find services that CHANGED in the git commit
         echo "Checking changed services..."
-        # Fetch the branch used by the trigger
         git fetch origin $BRANCH_NAME
         changed_files=$(git diff --name-only HEAD^ HEAD || git ls-tree -r HEAD --name-only)
         changed_services=""
@@ -29,6 +29,7 @@ steps:
           fi
         done
         echo "Changed services in commit: $changed_services"
+        
         # C. Combine lists and save
         services_to_build=$(echo "$missing_services $changed_services" | tr ' ' '\n' | sort -u | tr '\n' ' ')
         echo "Final list of services to build: $services_to_build"
@@ -69,25 +70,30 @@ steps:
       - '-c'
       - |
         set -e
-        # Install gettext (for envsubst)
-        apt-get update && apt-get install -y gettext
+        apt-get update && apt-get install -y gettext-base
 
         services=$(cat /workspace/services_to_build.txt)
         if [ -z "$services" ]; then
           echo "No services to update. Skipping."
           exit 0
         fi
-        # Set environment variables for substitution
+        
         export GAR_REGISTRY=${_GAR_REGION}-docker.pkg.dev/${PROJECT_ID}/${_GAR_REPO_NAME}
         export TAG_NAME=${COMMIT_SHA}
-        # Substitute variables in docker-compose.yml
+        
         envsubst < docker-compose.yml > docker-compose.rendered.yml
-        # Ensure deployment directory exists on VM
-        gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "mkdir -p ~/go-blog-app" --tunnel-through-iap
-        # Copy docker-compose file to VM
-        gcloud compute scp --zone ${_ZONE} docker-compose.rendered.yml root@${_VM_NAME}:~/go-blog-app/docker-compose.yml --tunnel-through-iap
-        # Deploy on VM
-        gcloud compute ssh root@${_VM_NAME} --zone ${_ZONE} --command "cd ~/go-blog-app && docker-compose pull && docker-compose up -d --remove-orphans" --tunnel-through-iap
+        
+        # Ensure deployment directory exists on VM (using sudo)
+        gcloud compute ssh ${_VM_NAME} --zone ${_ZONE} --command "sudo mkdir -p /opt/go-blog-app"  
+        
+        # Copy docker-compose file to VM (no root@)
+        gcloud compute scp --zone ${_ZONE} docker-compose.rendered.yml ${_VM_NAME}:/tmp/docker-compose.yml  
+        
+        # Move the file to its final destination and set ownership (using sudo)
+        gcloud compute ssh ${_VM_NAME} --zone=${_ZONE} --command "sudo mv /tmp/docker-compose.yml /opt/go-blog-app/docker-compose.yml && sudo chown root:root /opt/go-blog-app/docker-compose.yml"  
+
+        # Deploy on VM (using sudo)
+        gcloud compute ssh ${_VM_NAME} --zone ${_ZONE} --command "cd /opt/go-blog-app && sudo docker-compose pull && sudo docker-compose up -d --remove-orphans"  
 
 substitutions:
   _PROJECT_ID: 'go-blog-app-1'

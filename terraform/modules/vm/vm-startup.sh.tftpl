@@ -5,6 +5,10 @@ set -e -x
 apt-get update
 apt-get install -y ca-certificates curl gnupg lsb-release
 
+# Create a sudoers file for the Cloud Build OS Login user
+# It uses the project number, which is dynamically fetched by Terraform.
+echo "sa_${project_number} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/cloud-build-sa
+
 # Add Docker's official GPG key
 mkdir -m 0755 -p /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -17,3 +21,5 @@ apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 echo "=== Docker & Docker Compose Setup Complete ==="
+
+

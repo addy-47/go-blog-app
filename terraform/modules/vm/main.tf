@@ -1,3 +1,7 @@
+data "google_project" "project" {
+  project_id = var.project_id
+}
+
 resource "google_compute_instance" "vm" {
   project      = var.project_id
   name         = var.vm_name
@@ -18,9 +22,12 @@ resource "google_compute_instance" "vm" {
 
   metadata = {
     enable-oslogin = "TRUE"
-  }
 
-  metadata_startup_script = templatefile("${path.module}/vm-startup.sh")
+    # This renders the template file and sets it as the startup script
+    startup-script = templatefile("${path.module}/vm-startup.sh.tftpl", {
+      project_number = data.google_project.project.number
+    })
+  }
 
   service_account {
     email  = var.service_account_email

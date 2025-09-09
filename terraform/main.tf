@@ -22,6 +22,8 @@ provider "github" {
   owner = split("/", var.github_repository)[0]
 }
 
+data "google_project" "project" {}
+
 # -----------------------------------------------------------------------------
 # Modules for Infrastructure Provisioning
 # -----------------------------------------------------------------------------
